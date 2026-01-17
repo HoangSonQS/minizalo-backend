@@ -1,0 +1,80 @@
+
+
+services:
+  minizalo-db:
+    image: postgres:13-alpine
+    container_name: minizalo-db
+    environment:
+      POSTGRES_DB: minizalo_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: minizalopass
+    ports:
+      - "5432:5432"
+    volumes:
+      - minizalo-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d minizalo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    command: -jar DynamoDBLocal.jar -sharedDb -dbPath ./data
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001" # MinIO Console port
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: ?r`qkpp>.c,#~~]lNtAN
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  minizalo-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: minizalo-backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: ${DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      AWS_DYNAMODB_ENDPOINT: ${AWS_DYNAMODB_ENDPOINT}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME}
+      APP_JWT_SECRET: ${JWT_SECRET_KEY}
+      APP_ACCESS_TOKEN_EXPIRATION_MINUTES: ${APP_ACCESS_TOKEN_EXPIRATION_MINUTES}
+      APP_REFRESH_TOKEN_EXPIRATION_DAYS: ${APP_REFRESH_TOKEN_EXPIRATION_DAYS}
+    depends_on:
+      - minizalo-db
+      - dynamodb-local
+      - minio
+
+volumes:
+  minizalo-db-data:
+  dynamodb-data:
+  minio-data:
