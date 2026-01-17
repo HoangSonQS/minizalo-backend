@@ -6,14 +6,14 @@ services:
     container_name: minizalo-db
     environment:
       POSTGRES_DB: minizalo_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: minizalopass
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - minizalo-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d minizalo_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d minizalo_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -34,8 +34,8 @@ services:
       - "9000:9000"
       - "9001:9001" # MinIO Console port
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: ?r`qkpp>.c,#~~]lNtAN
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"
