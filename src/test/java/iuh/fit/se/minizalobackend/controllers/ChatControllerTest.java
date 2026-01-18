@@ -14,7 +14,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -40,33 +43,38 @@ public class ChatControllerTest {
     @Test
     @WithMockUser(username = "user1")
     void getMessages_Success() throws Exception {
-        String fromUser = "user1";
-        String toUser = "user2";
+        String fromUser = "user1"; // Current User from Principal
+        String toUser = "user2"; // Target User from RequestParam
         // Controller logic: userId1.compareTo(userId2) > 0 ? userId1 + "_" + userId2 :
         // userId2 + "_" + userId1;
         // "user1".compareTo("user2") < 0 -> returns "user2_user1"
         String conversationId = "user2_user1";
 
-        Message msg = new Message(conversationId, "1", fromUser, toUser, "Hello", LocalDateTime.now(), false);
-        given(messageService.getMessages(conversationId)).willReturn(Collections.singletonList(msg));
+        Message msg = new Message(UUID.randomUUID(), conversationId, fromUser, toUser, "Hello", LocalDateTime.now(),
+                false);
+        given(messageService.getMessages(eq(conversationId), anyInt(), anyInt()))
+                .willReturn(Collections.singletonList(msg));
 
-        mockMvc.perform(get("/messages/{from}/{to}", fromUser, toUser))
+        mockMvc.perform(get("/api/messages")
+                .param("userId", toUser)
+                .param("page", "0")
+                .param("size", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].content").value("Hello"))
-                .andExpect(jsonPath("$[0].fromUserId").value(fromUser));
+                .andExpect(jsonPath("$[0].senderId").value(fromUser));
     }
 
     @Test
     @WithMockUser(username = "user1")
     void recallMessage_Success() throws Exception {
-        String jsonRequest = "{\"fromUserId\":\"user1\", \"toUserId\":\"user2\", \"messageId\":\"msg123\"}";
-        String conversationId = "user2_user1";
+        String messageId = UUID.randomUUID().toString();
+        String jsonRequest = "{\"messageId\":\"" + messageId + "\"}";
 
         mockMvc.perform(post("/messages/recall")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(jsonRequest))
                 .andExpect(status().isOk());
 
-        verify(messageService).recallMessage(conversationId, "msg123");
+        verify(messageService).recallMessage(messageId);
     }
 }

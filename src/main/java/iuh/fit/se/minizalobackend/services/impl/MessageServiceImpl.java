@@ -3,6 +3,8 @@ package iuh.fit.se.minizalobackend.services.impl;
 import iuh.fit.se.minizalobackend.models.Message;
 import iuh.fit.se.minizalobackend.repository.MessageRepository;
 import iuh.fit.se.minizalobackend.services.MessageService;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -20,23 +22,28 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public Message saveMessage(Message message) {
-        message.setMessageId(UUID.randomUUID().toString());
-        message.setTimestamp(LocalDateTime.now());
-        messageRepository.save(message);
-        return message;
+        message.setCreatedAt(LocalDateTime.now());
+        message.setRecalled(false);
+        return messageRepository.save(message);
     }
 
     @Override
-    public List<Message> getMessages(String conversationId) {
-        return messageRepository.findByConversationId(conversationId);
+    public List<Message> getMessages(String conversationId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable).getContent();
     }
 
     @Override
-    public void recallMessage(String conversationId, String messageId) {
-        Message message = messageRepository.findById(conversationId, messageId);
-        if (message != null) {
-            message.setRecalled(true);
-            messageRepository.save(message);
+    public void recallMessage(String messageId) {
+        try {
+            UUID uuid = UUID.fromString(messageId);
+            Message message = messageRepository.findById(uuid).orElse(null);
+            if (message != null) {
+                message.setRecalled(true);
+                messageRepository.save(message);
+            }
+        } catch (IllegalArgumentException e) {
+            // Handle invalid UUID string
         }
     }
 }
