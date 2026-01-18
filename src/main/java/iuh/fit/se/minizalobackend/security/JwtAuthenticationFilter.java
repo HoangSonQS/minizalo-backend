@@ -1,9 +1,5 @@
 package iuh.fit.se.minizalobackend.security;
 
-import iuh.fit.se.minizalobackend.models.User;
-import iuh.fit.se.minizalobackend.repository.UserRepository;
-import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
-import iuh.fit.se.minizalobackend.security.services.UserDetailsServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +15,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.UUID;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -27,7 +22,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private JwtTokenProvider tokenProvider;
 
     @Autowired
-    private UserRepository userRepository; // Inject UserRepository
+    private iuh.fit.se.minizalobackend.services.impl.UserDetailsServiceImpl userDetailsService;
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
@@ -40,12 +35,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
                 String userId = tokenProvider.getUserIdFromAccessToken(jwt);
 
-                User user = userRepository.findById(UUID.fromString(userId))
-                        .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
-
-                UserDetails userDetails = UserDetailsImpl.build(user);
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                UserDetails userDetails = userDetailsService.loadUserById(userId);
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);

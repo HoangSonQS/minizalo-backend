@@ -41,8 +41,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleTokenRefreshException(TokenRefreshException ex) {
         Map<String, Object> errorDetails = new HashMap<>();
         errorDetails.put("timestamp", LocalDateTime.now());
-        errorDetails.put("status", HttpStatus.FORBIDDEN.value());
+        errorDetails.put("status", HttpStatus.BAD_REQUEST.value());
         errorDetails.put("message", ex.getMessage());
-        return new ResponseEntity<>(errorDetails, HttpStatus.FORBIDDEN);
+        return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
     }
 }

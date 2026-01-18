@@ -46,6 +46,9 @@ public class User {
     )
     private Set<Role> roles = new HashSet<>();
 
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private RefreshToken refreshToken;
+
     public User(String username, String email, String password) {
         this.username = username;
         this.email = email;

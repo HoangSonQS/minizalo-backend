@@ -6,8 +6,6 @@ import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.response.FriendResponse;
 import iuh.fit.se.minizalobackend.payload.response.UserResponse;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
-import iuh.fit.se.minizalobackend.repository.UserRepository;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,12 +18,10 @@ import java.util.stream.Collectors;
 public class FriendService {
 
     private final FriendRepository friendRepository;
-    private final UserRepository userRepository;
     private final UserService userService;
 
-    public FriendService(FriendRepository friendRepository, UserRepository userRepository, UserService userService) {
+    public FriendService(FriendRepository friendRepository, UserService userService) {
         this.friendRepository = friendRepository;
-        this.userRepository = userRepository;
         this.userService = userService;
     }
 
@@ -45,10 +41,10 @@ public class FriendService {
         }
 
         Optional<Friend> existingReverseFriendship = friendRepository.findByUserAndFriend(receiver, sender);
-        if (existingReverseFriendship.isPresent() && existingReverseFriendship.get().getStatus() == EFriendStatus.PENDING) {
+        if (existingReverseFriendship.isPresent()
+                && existingReverseFriendship.get().getStatus() == EFriendStatus.PENDING) {
             throw new IllegalStateException("You have a pending friend request from this user. Accept it instead.");
         }
-
 
         Friend friendRequest = new Friend(null, sender, receiver, EFriendStatus.PENDING, null);
         return mapFriendToFriendResponse(friendRepository.save(friendRequest));
@@ -70,7 +66,8 @@ public class FriendService {
         Friend acceptedRequest = friendRepository.save(friendRequest);
 
         // Create a reciprocal friendship for the sender
-        Friend reciprocalFriendship = new Friend(null, friendRequest.getFriend(), friendRequest.getUser(), EFriendStatus.ACCEPTED, null);
+        Friend reciprocalFriendship = new Friend(null, friendRequest.getFriend(), friendRequest.getUser(),
+                EFriendStatus.ACCEPTED, null);
         friendRepository.save(reciprocalFriendship);
 
         return mapFriendToFriendResponse(acceptedRequest);
@@ -114,7 +111,8 @@ public class FriendService {
 
     public List<FriendResponse> getPendingFriendRequests(UUID userId) {
         User currentUser = userService.getUserById(userId);
-        // Find requests where current user is the friend (receiver) and status is PENDING
+        // Find requests where current user is the friend (receiver) and status is
+        // PENDING
         return friendRepository.findByFriendAndStatus(currentUser, EFriendStatus.PENDING).stream()
                 .map(this::mapFriendToFriendResponse)
                 .collect(Collectors.toList());
@@ -151,7 +149,6 @@ public class FriendService {
             }
         });
     }
-
 
     private FriendResponse mapFriendToFriendResponse(Friend friend) {
         UserResponse user = userService.mapUserToUserResponse(friend.getUser());

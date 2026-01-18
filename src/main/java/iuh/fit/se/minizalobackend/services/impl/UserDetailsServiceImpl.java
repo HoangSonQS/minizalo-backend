@@ -1,7 +1,8 @@
-package iuh.fit.se.minizalobackend.security.services;
+package iuh.fit.se.minizalobackend.services.impl;
 
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -22,6 +23,14 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User Not Found with username: " + username));
+
+        return UserDetailsImpl.build(user);
+    }
+
+    @Transactional
+    public UserDetails loadUserById(String userId) {
+        User user = userRepository.findById(java.util.UUID.fromString(userId))
+                .orElseThrow(() -> new UsernameNotFoundException("User Not Found with id: " + userId));
 
         return UserDetailsImpl.build(user);
     }

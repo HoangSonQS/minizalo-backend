@@ -8,8 +8,6 @@ import iuh.fit.se.minizalobackend.payload.request.UserProfileUpdateRequest;
 import iuh.fit.se.minizalobackend.payload.response.UserResponse;
 import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
-import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,15 +22,21 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 public class UserService {
+
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
     private final MinioService minioService;
     private final PasswordEncoder encoder;
     private final RoleRepository roleRepository;
 
-    public UserService(UserRepository userRepository, MinioService minioService, PasswordEncoder encoder, RoleRepository roleRepository) {
+    public UserService(UserRepository userRepository, MinioService minioService, PasswordEncoder encoder,
+            RoleRepository roleRepository) {
         this.userRepository = userRepository;
         this.minioService = minioService;
         this.encoder = encoder;
@@ -41,6 +45,10 @@ public class UserService {
 
     @Transactional
     public void registerNewUser(SignupRequest signupRequest) {
+        long startTime = System.nanoTime();
+        logger.debug("Starting registration for user: {}", signupRequest.getUsername());
+
+        // Ensure indexes are created on 'username' and 'email' columns for performance
         if (userRepository.existsByUsername(signupRequest.getUsername())) {
             throw new IllegalArgumentException("Error: Username is already taken!");
         }
@@ -55,35 +63,18 @@ public class UserService {
                 signupRequest.getEmail(),
                 encoder.encode(signupRequest.getPassword()));
 
-        Set<String> strRoles = signupRequest.getRole();
         Set<Role> roles = new HashSet<>();
+        Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+                .orElseThrow(() -> new IllegalArgumentException("Error: User role is not found."));
+        roles.add(userRole);
 
-        if (strRoles == null || strRoles.isEmpty()) {
-            Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                    .orElseThrow(() -> new IllegalArgumentException("Error: User role is not found."));
-            roles.add(userRole);
-        } else {
-            strRoles.forEach(role -> {
-                switch (role) {
-                    case "admin":
-                        Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
-                                .orElseThrow(() -> new IllegalArgumentException("Error: Admin role is not found."));
-                        roles.add(adminRole);
-                        break;
-                    case "mod":
-                        Role modRole = roleRepository.findByName(ERole.ROLE_MODERATOR)
-                                .orElseThrow(() -> new IllegalArgumentException("Error: Moderator role is not found."));
-                        roles.add(modRole);
-                        break;
-                    default:
-                        Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                                .orElseThrow(() -> new IllegalArgumentException("Error: User role is not found."));
-                        roles.add(userRole);
-                }
-            });
-        }
         user.setRoles(roles);
         userRepository.save(user);
+        userRepository.flush();
+
+        long endTime = System.nanoTime();
+        long durationMillis = (endTime - startTime) / 1_000_000;
+        logger.info("User registration for {} completed in {} ms", signupRequest.getUsername(), durationMillis);
     }
 
     public UserResponse getCurrentUserProfile(UserDetails userDetails) {
@@ -116,8 +107,7 @@ public class UserService {
             String avatarUrl = minioService.uploadFile(
                     avatarFile,
                     "avatars/" + user.getId() + "/",
-                    avatarFile.getOriginalFilename()
-            );
+                    avatarFile.getOriginalFilename());
             user.setAvatarUrl(avatarUrl);
         }
         return mapUserToUserResponse(userRepository.save(user));
@@ -143,7 +133,6 @@ public class UserService {
                 user.getAvatarUrl(),
                 user.getStatusMessage(),
                 user.getLastSeen(),
-                user.getIsOnline()
-        );
+                user.getIsOnline());
     }
 }

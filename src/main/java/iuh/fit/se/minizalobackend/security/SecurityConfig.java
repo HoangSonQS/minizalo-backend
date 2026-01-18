@@ -1,6 +1,6 @@
 package iuh.fit.se.minizalobackend.security;
 
-import iuh.fit.se.minizalobackend.security.services.UserDetailsServiceImpl;
+import iuh.fit.se.minizalobackend.services.impl.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,9 +21,14 @@ import org.springframework.security.config.Customizer;
 
 import java.util.Arrays;
 
+import org.springframework.beans.factory.annotation.Value;
+
 @Configuration
 @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
+
+    @Value("${app.security.bcrypt.strength:10}") // Default strength of 10
+    private int bcryptStrength;
 
     @Autowired
     UserDetailsServiceImpl userDetailsService;
@@ -53,13 +58,18 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(bcryptStrength);
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("*")); // Allow all origins for development
+        configuration.setAllowedOrigins(Arrays.asList(
+                "http://localhost:3000",
+                "http://localhost:8081",
+                "http://10.0.2.2:8081",
+                "http://localhost:19000",
+                "http://localhost:19006"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Allow all headers
         configuration.setAllowCredentials(true);
@@ -71,15 +81,17 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())
-            .cors(Customizer.withDefaults()) // Enable CORS using the bean
-            .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -> csrf.disable())
+                .cors(Customizer.withDefaults()) // Enable CORS using the bean
+                .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/auth/signin", "/api/auth/signup", "/api/auth/refreshtoken",
+                                "/v3/api-docs/**")
+                        .permitAll()
+                        .requestMatchers("/api/auth/logout").authenticated()
                         .requestMatchers("/swagger-ui/**", "/actuator/**").hasRole("ADMIN")
-                        .anyRequest().authenticated()
-                );
+                        .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());
 

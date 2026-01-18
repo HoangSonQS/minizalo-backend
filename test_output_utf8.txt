@@ -1,0 +1,212 @@
+﻿[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< iuh.fit.se:minizalo-backend >---------------------
+[INFO] Building MiniZalo_Backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ minizalo-backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ minizalo-backend ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ minizalo-backend ---
+[INFO] Copying 1 resource from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ minizalo-backend ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- surefire:3.1.2:test (default-test) @ minizalo-backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running iuh.fit.se.minizalobackend.AuthControllerIntegrationTest
+21:25:30.289 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [iuh.fit.se.minizalobackend.AuthControllerIntegrationTest]: AuthControllerIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+21:25:30.386 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration iuh.fit.se.minizalobackend.MiniZaloBackendApplication for test class iuh.fit.se.minizalobackend.AuthControllerIntegrationTest
+21:25:30.537 [main] INFO org.springframework.boot.devtools.restart.RestartApplicationListener -- Restart disabled due to context in which it is running
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.1)
+
+{"@timestamp":"2026-01-18T21:25:31.040006+07:00","message":"\r\n\r\nFound multiple occurrences of org.json.JSONObject on the class path:\r\n\r\n\tjar:file:/C:/Users/Hoang%20Son/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class\r\n\tjar:file:/C:/Users/Hoang%20Son/.m2/repository/org/json/json/20230227/json-20230227.jar!/org/json/JSONObject.class\r\n\r\nYou may wish to exclude one of them to ensure predictable runtime behavior\r\n","logger":"org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer","thread":"main","level":"WARN","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:31.0623958+07:00","message":"Starting AuthControllerIntegrationTest using Java 23.0.1 with PID 19444 (started by Hoang Son in D:\\HK2-2025-2026\\CNMOI\\MiniZalo\\MiniZalo_Backend)","logger":"iuh.fit.se.minizalobackend.AuthControllerIntegrationTest","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:31.0633927+07:00","message":"The following 1 profile is active: \"test\"","logger":"iuh.fit.se.minizalobackend.AuthControllerIntegrationTest","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:32.5897171+07:00","message":"Bootstrapping Spring Data JPA repositories in DEFAULT mode.","logger":"org.springframework.data.repository.config.RepositoryConfigurationDelegate","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:32.7066731+07:00","message":"Finished Spring Data repository scanning in 104 ms. Found 4 JPA repository interfaces.","logger":"org.springframework.data.repository.config.RepositoryConfigurationDelegate","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.1336189+07:00","message":"HHH000204: Processing PersistenceUnitInfo [name: default]","logger":"org.hibernate.jpa.internal.util.LogHelper","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.2325726+07:00","message":"HHH000412: Hibernate ORM core version 6.4.1.Final","logger":"org.hibernate.Version","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.284698+07:00","message":"HHH000026: Second-level cache disabled","logger":"org.hibernate.cache.internal.RegionFactoryInitiator","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.5246737+07:00","message":"No LoadTimeWeaver setup: ignoring JPA class transformer","logger":"org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.5511841+07:00","message":"HikariPool-1 - Starting...","logger":"com.zaxxer.hikari.HikariDataSource","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.7292136+07:00","message":"HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:testdb user=SA","logger":"com.zaxxer.hikari.pool.HikariPool","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.730194+07:00","message":"HikariPool-1 - Start completed.","logger":"com.zaxxer.hikari.HikariDataSource","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.749709+07:00","message":"HHH000511: The 2.2.0 version for [org.hibernate.dialect.PostgreSQLDialect] is no longer supported, hence certain features may not work properly. The minimum supported version is 12.0.0. Check the community dialects project for available legacy versions.","logger":"org.hibernate.dialect.Dialect","thread":"main","level":"WARN","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:34.7544527+07:00","message":"HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)","logger":"org.hibernate.orm.deprecation","thread":"main","level":"WARN","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:35.7112873+07:00","message":"HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)","logger":"org.hibernate.engine.transaction.jta.platform.internal.JtaPlatformInitiator","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:35.7665425+07:00","message":"Initialized JPA EntityManagerFactory for persistence unit 'default'","logger":"org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:38.9856329+07:00","message":"Exposing 1 endpoint(s) beneath base path '/actuator'","logger":"org.springframework.boot.actuate.endpoint.web.EndpointLinksResolver","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:39.1814383+07:00","message":"Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@1b3aa246, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@1abc3085, org.springframework.security.web.context.SecurityContextHolderFilter@30b16aa6, org.springframework.security.web.header.HeaderWriterFilter@40977fab, org.springframework.web.filter.CorsFilter@32c8df0b, org.springframework.security.web.authentication.logout.LogoutFilter@6a1b51a7, iuh.fit.se.minizalobackend.security.JwtAuthenticationFilter@24a024c8, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@5f45abe6, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@2e949007, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@4037a204, org.springframework.security.web.session.SessionManagementFilter@17125ea9, org.springframework.security.web.access.ExceptionTranslationFilter@cec9f23, org.springframework.security.web.access.intercept.AuthorizationFilter@4c55d3ce]","logger":"org.springframework.security.web.DefaultSecurityFilterChain","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:39.9937504+07:00","message":"Initializing Spring TestDispatcherServlet ''","logger":"org.springframework.boot.test.mock.web.SpringBootMockServletContext","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:39.9937504+07:00","message":"Initializing Servlet ''","logger":"org.springframework.test.web.servlet.TestDispatcherServlet","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:39.9963985+07:00","message":"Completed initialization in 2 ms","logger":"org.springframework.test.web.servlet.TestDispatcherServlet","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:40.1043577+07:00","message":"Started AuthControllerIntegrationTest in 9.577 seconds (process running for 10.651)","logger":"iuh.fit.se.minizalobackend.AuthControllerIntegrationTest","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:40.7611194+07:00","message":"User registration for testuser completed in 38 ms","logger":"iuh.fit.se.minizalobackend.services.UserService","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+
+MockHttpServletRequest:
+      HTTP Method = POST
+      Request URI = /api/auth/signup
+       Parameters = {}
+          Headers = [Content-Type:"application/json;charset=UTF-8", Content-Length:"75"]
+             Body = {"username":"testuser","email":"test@example.com","password":"password123"}
+    Session Attrs = {}
+
+Handler:
+             Type = iuh.fit.se.minizalobackend.controllers.AuthController
+           Method = iuh.fit.se.minizalobackend.controllers.AuthController#registerUser(SignupRequest)
+
+Async:
+    Async started = false
+     Async result = null
+
+Resolved Exception:
+             Type = null
+
+ModelAndView:
+        View name = null
+             View = null
+            Model = null
+
+FlashMap:
+       Attributes = null
+
+MockHttpServletResponse:
+           Status = 200
+    Error message = null
+          Headers = [Vary:"Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers", Content-Type:"application/json", X-Content-Type-Options:"nosniff", X-XSS-Protection:"0", Cache-Control:"no-cache, no-store, max-age=0, must-revalidate", Pragma:"no-cache", Expires:"0", X-Frame-Options:"DENY"]
+     Content type = application/json
+             Body = {"message":"User registered successfully!"}
+    Forwarded URL = null
+   Redirected URL = null
+          Cookies = []
+
+MockHttpServletRequest:
+      HTTP Method = POST
+      Request URI = /api/auth/signin
+       Parameters = {}
+          Headers = [Content-Type:"application/json;charset=UTF-8", Content-Length:"48"]
+             Body = {"username":"testuser","password":"password123"}
+    Session Attrs = {}
+
+Handler:
+             Type = iuh.fit.se.minizalobackend.controllers.AuthController
+           Method = iuh.fit.se.minizalobackend.controllers.AuthController#authenticateUser(LoginRequest)
+
+Async:
+    Async started = false
+     Async result = null
+
+Resolved Exception:
+             Type = null
+
+ModelAndView:
+        View name = null
+             View = null
+            Model = null
+
+FlashMap:
+       Attributes = null
+
+MockHttpServletResponse:
+           Status = 200
+    Error message = null
+          Headers = [Vary:"Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers", Content-Type:"application/json", X-Content-Type-Options:"nosniff", X-XSS-Protection:"0", Cache-Control:"no-cache, no-store, max-age=0, must-revalidate", Pragma:"no-cache", Expires:"0", X-Frame-Options:"DENY"]
+     Content type = application/json
+             Body = {"accessToken":"eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI5M2ZiZDlkNC00ZmRiLTQ0OTktYTIzZS01MDM1NTg2ZjQ3NzEiLCJpYXQiOjE3Njg3NDYzNDAsImV4cCI6MTc2ODc0NzI0MH0.zzXwMQTwEfK8zDCwrvqmF2ERXyqUys0g3A4ITPhbhvg6zzRtinSjADbiMliYorH_sqRmsmMKwdgRaAJPER8JBg","refreshToken":"fa752333-1eba-4dc7-a0a2-7c86027e4905","tokenType":"Bearer"}
+    Forwarded URL = null
+   Redirected URL = null
+          Cookies = []
+
+MockHttpServletRequest:
+      HTTP Method = POST
+      Request URI = /api/auth/refreshtoken
+       Parameters = {}
+          Headers = [Content-Type:"application/json;charset=UTF-8", Content-Length:"55"]
+             Body = {"refreshToken":"fa752333-1eba-4dc7-a0a2-7c86027e4905"}
+    Session Attrs = {}
+
+Handler:
+             Type = iuh.fit.se.minizalobackend.controllers.AuthController
+           Method = iuh.fit.se.minizalobackend.controllers.AuthController#refreshtoken(TokenRefreshRequest)
+
+Async:
+    Async started = false
+     Async result = null
+
+Resolved Exception:
+             Type = java.lang.IllegalArgumentException
+
+ModelAndView:
+        View name = null
+             View = null
+            Model = null
+
+FlashMap:
+       Attributes = null
+
+MockHttpServletResponse:
+           Status = 400
+    Error message = null
+          Headers = [Vary:"Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers", Content-Type:"application/json", X-Content-Type-Options:"nosniff", X-XSS-Protection:"0", Cache-Control:"no-cache, no-store, max-age=0, must-revalidate", Pragma:"no-cache", Expires:"0", X-Frame-Options:"DENY"]
+     Content type = application/json
+             Body = {"message":"Error: User not found with ID: 93fbd9d4-4fdb-4499-a23e-5035586f4771","timestamp":"2026-01-18T21:25:40.9036099","status":400}
+    Forwarded URL = null
+   Redirected URL = null
+          Cookies = []
+{"@timestamp":"2026-01-18T21:25:40.9520638+07:00","message":"User registration for duplicateuser completed in 7 ms","logger":"iuh.fit.se.minizalobackend.services.UserService","thread":"main","level":"INFO","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+{"@timestamp":"2026-01-18T21:25:40.9814046+07:00","message":"Unauthorized error: Bad credentials","logger":"iuh.fit.se.minizalobackend.security.AuthEntryPointJwt","thread":"main","level":"ERROR","context":{"appName":"MiniZalo_Backend"},"app_name":"MiniZalo_Backend"}
+[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 10.85 s <<< FAILURE! -- in iuh.fit.se.minizalobackend.AuthControllerIntegrationTest
+[ERROR] iuh.fit.se.minizalobackend.AuthControllerIntegrationTest.testUserRegistrationAndLogin -- Time elapsed: 0.454 s <<< FAILURE!
+java.lang.AssertionError: Status expected:<200> but was:<400>
+	at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+	at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+	at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+	at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+	at iuh.fit.se.minizalobackend.AuthControllerIntegrationTest.testUserRegistrationAndLogin(AuthControllerIntegrationTest.java:81)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   AuthControllerIntegrationTest.testUserRegistrationAndLogin:81 Status expected:<200> but was:<400>
+[INFO] 
+[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  13.488 s
+[INFO] Finished at: 2026-01-18T21:25:41+07:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.1.2:test (default-test) on project minizalo-backend: There are test failures.
+[ERROR] 
+[ERROR] Please refer to D:\HK2-2025-2026\CNMOI\MiniZalo\MiniZalo_Backend\target\surefire-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

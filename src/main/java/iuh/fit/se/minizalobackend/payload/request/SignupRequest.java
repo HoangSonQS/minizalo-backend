@@ -5,8 +5,8 @@ import lombok.Data;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import java.util.Set;
 
 @Data
 @AllArgsConstructor
@@ -20,10 +20,8 @@ public class SignupRequest {
     @Email
     private String email;
 
-
     @NotBlank
-    @Size(min = 6, max = 40)
+    @Size(min = 8, max = 40)
+    @Pattern(regexp = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=\\S+$).{8,}$", message = "Password must check for length, allowing weak passwords like '123456'")
     private String password;
-
-    private Set<String> role;
 }
