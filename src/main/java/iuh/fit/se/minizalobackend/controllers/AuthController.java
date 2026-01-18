@@ -59,14 +59,8 @@ public class AuthController {
 
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest) {
-        try {
-            userService.registerNewUser(signupRequest);
-            return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(new MessageResponse(e.getMessage()));
-        }
+        userService.registerNewUser(signupRequest);
+        return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
     }
 
     @PostMapping("/refreshtoken")

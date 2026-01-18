@@ -55,11 +55,33 @@ public class UserService {
                 signupRequest.getEmail(),
                 encoder.encode(signupRequest.getPassword()));
 
+        Set<String> strRoles = signupRequest.getRole();
         Set<Role> roles = new HashSet<>();
-        Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                .orElseThrow(() -> new RuntimeException("Error: User role is not found."));
-        roles.add(userRole);
 
+        if (strRoles == null || strRoles.isEmpty()) {
+            Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+                    .orElseThrow(() -> new IllegalArgumentException("Error: User role is not found."));
+            roles.add(userRole);
+        } else {
+            strRoles.forEach(role -> {
+                switch (role) {
+                    case "admin":
+                        Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
+                                .orElseThrow(() -> new IllegalArgumentException("Error: Admin role is not found."));
+                        roles.add(adminRole);
+                        break;
+                    case "mod":
+                        Role modRole = roleRepository.findByName(ERole.ROLE_MODERATOR)
+                                .orElseThrow(() -> new IllegalArgumentException("Error: Moderator role is not found."));
+                        roles.add(modRole);
+                        break;
+                    default:
+                        Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+                                .orElseThrow(() -> new IllegalArgumentException("Error: User role is not found."));
+                        roles.add(userRole);
+                }
+            });
+        }
         user.setRoles(roles);
         userRepository.save(user);
     }

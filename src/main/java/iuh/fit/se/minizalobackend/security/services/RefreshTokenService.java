@@ -31,7 +31,7 @@ public class RefreshTokenService {
 
     public RefreshToken createRefreshToken(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new TokenRefreshException("", "User not found with id: " + userId));
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
 
         RefreshToken refreshToken = refreshTokenRepository.findByUser(user)
                 .orElse(new RefreshToken());
@@ -64,7 +64,9 @@ public class RefreshTokenService {
 
     @Transactional
     public int deleteByUserId(UUID userId) {
-        return refreshTokenRepository.deleteByUser(userRepository.findById(userId).get());
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        return refreshTokenRepository.deleteByUser(user);
     }
 
     @Transactional
