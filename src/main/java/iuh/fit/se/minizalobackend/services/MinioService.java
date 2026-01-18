@@ -45,13 +45,28 @@ public class MinioService {
                             .object(objectName)
                             .stream(file.getInputStream(), file.getSize(), -1)
                             .contentType(file.getContentType())
-                            .build()
-            );
+                            .build());
         } catch (Exception e) {
             throw new RuntimeException("Error uploading file to MinIO: " + e.getMessage(), e);
         }
         // MinIO by default serves objects under /bucketname/objectname path
-        // For local development, it will be accessible via http://localhost:9000/minizalo-bucket/avatars/uuid_filename.jpg
-        return "/"+ bucketName + "/" + objectName;
+        // For local development, it will be accessible via
+        // http://localhost:9000/minizalo-bucket/avatars/uuid_filename.jpg
+        return "/" + bucketName + "/" + objectName;
+    }
+
+    public String getPresignedUrl(String folder, String fileName) {
+        String objectName = folder + UUID.randomUUID().toString() + "_" + fileName;
+        try {
+            return minioClient.getPresignedObjectUrl(
+                    io.minio.GetPresignedObjectUrlArgs.builder()
+                            .method(io.minio.http.Method.PUT)
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .expiry(60 * 15) // 15 minutes
+                            .build());
+        } catch (Exception e) {
+            throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);
+        }
     }
 }
