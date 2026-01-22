@@ -101,6 +101,12 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- ModelMapper -->
+        <dependency>
+            <groupId>org.modelmapper</groupId>
+            <artifactId>modelmapper</artifactId>
+            <version>3.2.0</version>
+        </dependency>
         <!-- Source: https://mvnrepository.com/artifact/software.amazon.awssdk/dynamodb -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

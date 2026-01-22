@@ -1,12 +1,14 @@
 package iuh.fit.se.minizalobackend.services;
 
-import iuh.fit.se.minizalobackend.models.Message;
-import java.util.List;
+import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
+import iuh.fit.se.minizalobackend.models.MessageDynamo;
+
+import java.util.UUID;
 
 public interface MessageService {
-    Message saveMessage(Message message);
+    MessageDynamo saveMessage(MessageDynamo message);
 
-    List<Message> getMessages(String conversationId, int page, int size);
+    PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit);
 
     void recallMessage(String messageId);
 }

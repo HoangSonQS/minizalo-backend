@@ -1,49 +1,45 @@
 package iuh.fit.se.minizalobackend.services.impl;
 
-import iuh.fit.se.minizalobackend.models.Message;
-import iuh.fit.se.minizalobackend.repository.MessageRepository;
+import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
+import iuh.fit.se.minizalobackend.models.MessageDynamo;
+import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import iuh.fit.se.minizalobackend.services.MessageService;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class MessageServiceImpl implements MessageService {
 
-    private final MessageRepository messageRepository;
+    private final MessageDynamoRepository messageDynamoRepository;
 
-    public MessageServiceImpl(MessageRepository messageRepository) {
-        this.messageRepository = messageRepository;
+    @Override
+    public MessageDynamo saveMessage(MessageDynamo message) {
+        // Ensure required fields are set before saving
+        if (message.getMessageId() == null) {
+            message.setMessageId(UUID.randomUUID().toString());
+        }
+        if (message.getCreatedAt() == null) {
+            message.setCreatedAt(Instant.now().toString());
+        }
+        log.debug("Saving message to DynamoDB for chat room: {}", message.getChatRoomId());
+        messageDynamoRepository.save(message);
+        return message;
     }
 
     @Override
-    public Message saveMessage(Message message) {
-        message.setCreatedAt(LocalDateTime.now());
-        message.setRecalled(false);
-        return messageRepository.save(message);
-    }
-
-    @Override
-    public List<Message> getMessages(String conversationId, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        return messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable).getContent();
+    public PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit) {
+        log.debug("Fetching messages from DynamoDB for room: {}, limit: {}", roomId, limit);
+        return messageDynamoRepository.getMessagesByRoomId(roomId.toString(), lastKey, limit);
     }
 
     @Override
     public void recallMessage(String messageId) {
-        try {
-            UUID uuid = UUID.fromString(messageId);
-            Message message = messageRepository.findById(uuid).orElse(null);
-            if (message != null) {
-                message.setRecalled(true);
-                messageRepository.save(message);
-            }
-        } catch (IllegalArgumentException e) {
-            // Handle invalid UUID string
-        }
+        log.warn("recallMessage is not yet implemented for DynamoDB!");
     }
 }

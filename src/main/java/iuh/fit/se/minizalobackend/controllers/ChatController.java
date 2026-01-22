@@ -1,87 +1,57 @@
 package iuh.fit.se.minizalobackend.controllers;
 
-import iuh.fit.se.minizalobackend.models.Message;
+import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
 import iuh.fit.se.minizalobackend.payload.request.RecallMessageRequest;
-import iuh.fit.se.minizalobackend.payload.response.ChatMessageResponse;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.UUID;
 
 @RestController
+@Slf4j
 public class ChatController {
 
-    private final SimpMessagingTemplate simpMessagingTemplate;
     private final MessageService messageService;
 
-    public ChatController(SimpMessagingTemplate simpMessagingTemplate, MessageService messageService) {
-        this.simpMessagingTemplate = simpMessagingTemplate;
+    public ChatController(MessageService messageService) {
         this.messageService = messageService;
     }
 
     @MessageMapping("/chat.send")
     public void sendMessage(@Payload @Valid ChatMessageRequest chatMessageRequest, Principal principal) {
-
         String senderId = getUserIdFromPrincipal(principal);
+        log.info("Received message from user: {} to user: {}", senderId, chatMessageRequest.getReceiverId());
+        // TODO: Refactor this to save a MessageDynamo entity and publish to WebSocket
+    }
 
-        Message message = new Message();
-        message.setFromUserId(senderId);
-        message.setToUserId(chatMessageRequest.getReceiverId());
-        message.setContent(chatMessageRequest.getContent());
-        message.setConversationId(getConversationId(senderId, chatMessageRequest.getReceiverId()));
-
-        Message savedMessage = messageService.saveMessage(message);
-
-        ChatMessageResponse response = ChatMessageResponse.builder()
-                .id(savedMessage.getId())
-                .senderId(savedMessage.getFromUserId())
-                .receiverId(savedMessage.getToUserId())
-                .content(savedMessage.getContent())
-                .createdAt(savedMessage.getCreatedAt())
-                .recalled(savedMessage.isRecalled())
-                .build();
-
-        // Publish to receiver
-        simpMessagingTemplate.convertAndSend("/topic/user/" + chatMessageRequest.getReceiverId(), response);
-        // Publish to sender (confirmation)
-        simpMessagingTemplate.convertAndSend("/topic/user/" + senderId, response);
+    @GetMapping("/api/chat/history/{roomId}")
+    public ResponseEntity<PaginatedMessageResult> getChatHistory(
+            @PathVariable UUID roomId,
+            @RequestParam(required = false) String lastKey,
+            @RequestParam(defaultValue = "20") int limit) {
+        log.info("Fetching history for room: {}, limit: {}", roomId, limit);
+        PaginatedMessageResult result = messageService.getRoomMessages(roomId, lastKey, limit);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/api/messages")
-    public ResponseEntity<List<ChatMessageResponse>> getMessages(
+    public ResponseEntity<List<?>> getMessages(
             @RequestParam String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Principal principal) {
-
-        String currentUserId = getUserIdFromPrincipal(principal);
-        String conversationId = getConversationId(currentUserId, userId);
-
-        List<Message> messages = messageService.getMessages(conversationId, page, size);
-
-        List<ChatMessageResponse> response = messages.stream()
-                .map(msg -> ChatMessageResponse.builder()
-                        .id(msg.getId())
-                        .senderId(msg.getFromUserId())
-                        .receiverId(msg.getToUserId())
-                        .content(msg.getContent())
-                        .createdAt(msg.getCreatedAt())
-                        .recalled(msg.isRecalled())
-                        .build())
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(response);
+        // This endpoint is deprecated in favor of /api/chat/history/{roomId}
+        return ResponseEntity.ok(List.of());
     }
 
-    // Helper to extract ID
     private String getUserIdFromPrincipal(Principal principal) {
         if (principal instanceof org.springframework.security.authentication.UsernamePasswordAuthenticationToken) {
             Object p = ((org.springframework.security.authentication.UsernamePasswordAuthenticationToken) principal)
@@ -90,14 +60,9 @@ public class ChatController {
                 return ((iuh.fit.se.minizalobackend.security.services.UserDetailsImpl) p).getId().toString();
             }
         }
-        return principal.getName(); // Fallback
+        return principal.getName();
     }
 
-    private String getConversationId(String userId1, String userId2) {
-        return userId1.compareTo(userId2) > 0 ? userId1 + "_" + userId2 : userId2 + "_" + userId1;
-    }
-
-    // Keeping recall for backward compatibility or updating it
     @PostMapping("/messages/recall")
     public void recallMessage(@RequestBody RecallMessageRequest recallMessageRequest) {
         messageService.recallMessage(recallMessageRequest.getMessageId());

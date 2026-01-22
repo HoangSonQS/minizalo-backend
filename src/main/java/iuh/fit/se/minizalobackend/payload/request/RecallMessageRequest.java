@@ -6,7 +6,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class RecallMessageRequest {
-    private String fromUserId; // ignored, but kept for potential structure compatibility
-    private String toUserId; // ignored
+    private String fromUserId;
+    private String toUserId;
     private String messageId;
 }

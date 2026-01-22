@@ -59,7 +59,6 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RefreshToken rotateRefreshToken(RefreshToken oldToken) {
-        // Break bi-directional relationship to ensure clean delete
         userRepository.findById(oldToken.getUser().getId()).ifPresent(user -> {
             user.setRefreshToken(null);
             userRepository.save(user);

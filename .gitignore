@@ -35,6 +35,7 @@ build/
 .vscode/
 
 .env
+.env.example
 .DS_Store
 data/
 *.log

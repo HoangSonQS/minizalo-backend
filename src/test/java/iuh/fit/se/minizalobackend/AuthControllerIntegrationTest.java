@@ -1,6 +1,11 @@
 package iuh.fit.se.minizalobackend;
 
+import org.springframework.boot.test.mock.mockito.MockBean;
+import io.minio.MinioClient;
+import io.minio.BucketExistsArgs;
+import io.minio.MakeBucketArgs;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import iuh.fit.se.minizalobackend.payload.request.LoginRequest;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.payload.request.TokenRefreshRequest;
@@ -20,12 +25,15 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("test") // Use a specific profile for testing
+@ActiveProfiles("test")
 public class AuthControllerIntegrationTest {
 
         @Autowired
@@ -37,12 +45,19 @@ public class AuthControllerIntegrationTest {
         @Autowired
         private UserRepository userRepository;
 
+        @MockBean
+        private MinioClient minioClient;
+
         private static final String AUTH_API = "/api/auth";
 
         @BeforeEach
-        void setUp() {
+        void setUp() throws Exception {
                 // Clear database before each test
                 userRepository.deleteAll();
+
+                // Mock MinioClient behavior
+                when(minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
+                doNothing().when(minioClient).makeBucket(any(MakeBucketArgs.class));
         }
 
         @Test
@@ -121,7 +136,8 @@ public class AuthControllerIntegrationTest {
                                 .andReturn();
 
                 Map<String, Object> response = objectMapper.readValue(result.getResponse().getContentAsString(),
-                                Map.class);
+                                new TypeReference<Map<String, Object>>() {
+                                });
                 assertEquals("Error: Username is already taken!", response.get("message"));
         }
 

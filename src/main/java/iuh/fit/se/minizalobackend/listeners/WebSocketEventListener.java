@@ -1,7 +1,6 @@
 package iuh.fit.se.minizalobackend.listeners;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Component;
@@ -11,19 +10,12 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 import java.security.Principal;
 
 @Component
+@Slf4j
 public class WebSocketEventListener {
-
-    private static final Logger logger = LoggerFactory.getLogger(WebSocketEventListener.class);
 
     @EventListener
     public void handleWebSocketConnectListener(SessionConnectedEvent event) {
-        StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
-        Principal user = headerAccessor.getUser();
-        if (user != null) {
-            logger.info("Received a new web socket connection. User: {}", user.getName());
-        } else {
-            logger.info("Received a new web socket connection. User: Anonymous");
-        }
+        log.info("Received a new web socket connection");
     }
 
     @EventListener
@@ -31,7 +23,7 @@ public class WebSocketEventListener {
         StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
         Principal user = headerAccessor.getUser();
         if (user != null) {
-            logger.info("User disconnected: {}", user.getName());
+            log.info("User disconnected: {}", user.getName());
         }
     }
 }

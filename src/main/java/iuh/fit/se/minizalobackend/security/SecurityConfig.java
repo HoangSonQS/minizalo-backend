@@ -27,7 +27,7 @@ import org.springframework.beans.factory.annotation.Value;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    @Value("${app.security.bcrypt.strength:10}") // Default strength of 10
+    @Value("${app.security.bcrypt.strength:10}")
     private int bcryptStrength;
 
     @Autowired

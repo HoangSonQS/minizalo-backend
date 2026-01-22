@@ -6,6 +6,7 @@ import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.services.impl.UserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +33,7 @@ class UserServiceTest {
     private MinioService minioService;
 
     @InjectMocks
-    private UserService userService;
+    private UserServiceImpl userServiceImpl;
 
     @BeforeEach
     void setUp() {
@@ -53,7 +54,7 @@ class UserServiceTest {
 
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        userService.registerNewUser(signupRequest);
+        userServiceImpl.registerNewUser(signupRequest);
 
         verify(userRepository, times(1)).existsByUsername("testuser");
         verify(userRepository, times(1)).existsByEmail("test@example.com");
@@ -69,7 +70,7 @@ class UserServiceTest {
         when(userRepository.existsByUsername(signupRequest.getUsername())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> userService.registerNewUser(signupRequest));
+                () -> userServiceImpl.registerNewUser(signupRequest));
 
         assertEquals("Error: Username is already taken!", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("existinguser");
@@ -87,7 +88,7 @@ class UserServiceTest {
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> userService.registerNewUser(signupRequest));
+                () -> userServiceImpl.registerNewUser(signupRequest));
 
         assertEquals("Error: Email is already in use!", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("testuser");
@@ -106,7 +107,7 @@ class UserServiceTest {
         when(roleRepository.findByName(ERole.ROLE_USER)).thenReturn(Optional.empty());
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> userService.registerNewUser(signupRequest));
+                () -> userServiceImpl.registerNewUser(signupRequest));
 
         assertEquals("Error: User role is not found.", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("testuser");
