@@ -29,7 +29,6 @@ public class ChatController {
     public void sendMessage(@Payload @Valid ChatMessageRequest chatMessageRequest, Principal principal) {
         String senderId = getUserIdFromPrincipal(principal);
         log.info("Received message from user: {} to user: {}", senderId, chatMessageRequest.getReceiverId());
-        // TODO: Refactor this to save a MessageDynamo entity and publish to WebSocket
     }
 
     @GetMapping("/api/chat/history/{roomId}")

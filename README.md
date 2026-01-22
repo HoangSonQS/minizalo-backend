@@ -1,6 +1,6 @@
 # MiniZalo Backend
 
-Backend service for MiniZalo application (Spring Boot 3.2 + PostgreSQL + MinIO + WebSocket).
+Backend service for MiniZalo application (Spring Boot 3.2 + PostgreSQL + DynamoDB + MinIO + WebSocket).
 
 ## 🚀 Getting Started
 
@@ -12,7 +12,7 @@ Backend service for MiniZalo application (Spring Boot 3.2 + PostgreSQL + MinIO +
 ```bash
 docker-compose up -d
 ```
-This starts PostgreSQL, MinIO, and DynamoDB (legacy).
+This starts PostgreSQL (Users/Rooms), MinIO (Files), and DynamoDB (Message History).
 
 ### Run Application
 ```bash
@@ -25,21 +25,30 @@ Server starts at `http://localhost:8080`.
 - **Endpoint**: `ws://localhost:8080/ws`
 - **Fallback**: SockJS at `http://localhost:8080/ws`
 - **Authentication**: JWT Token required in `Authorization` header during STOMP Connect.
-  - Header: `Authorization: Bearer <your_access_token>`
 
 ### Topics
-- **Subscribe**: `/topic/user/{your_user_id}` (Receives `ChatMessageResponse`)
-- **Send**: `/app/chat.send` (Payload: `ChatMessageRequest`)
+- **Individual**: `/topic/user/{user_id}` (Direct messages)
+- **Group Messages**: `/topic/group/{group_id}/messages` (Group chat history)
+- **Group Events**: `/topic/group/{group_id}/events` (Member joined/left, name changed, etc.)
 
 ## 📝 API Reference
 
 ### Auth
 - `POST /api/auth/signup`
-- `POST /api/auth/login`
+- `POST /api/auth/signin`
+- `POST /api/auth/refreshtoken`
 
-### Chat
-- `GET /api/messages?userId={targetId}&page=0&size=20` (Get history)
-- `POST /messages/recall` (Recall message)
+### Group Chat
+- `POST /api/group`: Create a new group
+- `POST /api/group/members`: Add members to group
+- `DELETE /api/group/members`: Remove members from group
+- `GET /api/group/{groupId}`: Get group details
+- `GET /api/group/my-groups`: Get current user's groups
+- `POST /api/group/message`: Send a group message (Success returns 200, message is delivered via WebSocket)
+- `POST /api/group/leave/{groupId}`: Leave a group
+
+### Message History
+- `GET /api/chat/history/{roomId}`: Get paginated history from DynamoDB
 
 ## 🧪 Testing
 Run unit and integration tests:
