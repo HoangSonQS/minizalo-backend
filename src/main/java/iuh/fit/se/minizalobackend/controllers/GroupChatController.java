@@ -2,12 +2,13 @@ package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.dtos.request.AddMembersRequest;
 import iuh.fit.se.minizalobackend.dtos.request.CreateGroupRequest;
+import iuh.fit.se.minizalobackend.dtos.request.MarkReadRequest;
 import iuh.fit.se.minizalobackend.dtos.request.RemoveMembersRequest;
 import iuh.fit.se.minizalobackend.dtos.request.SendGroupMessageRequest;
 import iuh.fit.se.minizalobackend.dtos.request.UpdateGroupRequest;
 import iuh.fit.se.minizalobackend.dtos.response.GroupResponse;
 import iuh.fit.se.minizalobackend.models.User;
-import iuh.fit.se.minizalobackend.payload.response.MessageResponse; // Import MessageResponse
+import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.GroupService;
 import iuh.fit.se.minizalobackend.services.UserService;
@@ -33,95 +34,108 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class GroupChatController {
 
-    private final GroupService groupService;
-    private final UserService userService;
+        private final GroupService groupService;
+        private final UserService userService;
 
-    @PostMapping
-    public ResponseEntity<GroupResponse> createGroup(
-            @Valid @RequestBody CreateGroupRequest request,
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User creator = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @PostMapping
+        public ResponseEntity<GroupResponse> createGroup(
+                        @Valid @RequestBody CreateGroupRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User creator = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        GroupResponse newGroup = groupService.createGroup(request, creator);
-        return new ResponseEntity<>(newGroup, HttpStatus.CREATED);
-    }
+                GroupResponse newGroup = groupService.createGroup(request, creator);
+                return new ResponseEntity<>(newGroup, HttpStatus.CREATED);
+        }
 
-    @PostMapping("/members")
-    public ResponseEntity<GroupResponse> addMembers(
-            @Valid @RequestBody AddMembersRequest request,
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User initiator = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @PostMapping("/members")
+        public ResponseEntity<GroupResponse> addMembers(
+                        @Valid @RequestBody AddMembersRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User initiator = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        GroupResponse updatedGroup = groupService.addMembersToGroup(request.getGroupId(), request.getMemberIds(),
-                initiator);
-        return ResponseEntity.ok(updatedGroup);
-    }
+                GroupResponse updatedGroup = groupService.addMembersToGroup(request.getGroupId(),
+                                request.getMemberIds(),
+                                initiator);
+                return ResponseEntity.ok(updatedGroup);
+        }
 
-    @DeleteMapping("/members")
-    public ResponseEntity<GroupResponse> removeMembers(
-            @Valid @RequestBody RemoveMembersRequest request,
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User initiator = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @DeleteMapping("/members")
+        public ResponseEntity<GroupResponse> removeMembers(
+                        @Valid @RequestBody RemoveMembersRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User initiator = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        GroupResponse updatedGroup = groupService.removeMembersFromGroup(request.getGroupId(), request.getMemberIds(),
-                initiator);
-        return ResponseEntity.ok(updatedGroup);
-    }
+                GroupResponse updatedGroup = groupService.removeMembersFromGroup(request.getGroupId(),
+                                request.getMemberIds(),
+                                initiator);
+                return ResponseEntity.ok(updatedGroup);
+        }
 
-    @GetMapping("/{groupId}")
-    public ResponseEntity<GroupResponse> getGroupInfo(
-            @PathVariable UUID groupId,
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User viewer = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @GetMapping("/{groupId}")
+        public ResponseEntity<GroupResponse> getGroupInfo(
+                        @PathVariable UUID groupId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User viewer = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        GroupResponse groupInfo = groupService.getGroupInfo(groupId, viewer);
-        return ResponseEntity.ok(groupInfo);
-    }
+                GroupResponse groupInfo = groupService.getGroupInfo(groupId, viewer);
+                return ResponseEntity.ok(groupInfo);
+        }
 
-    @GetMapping("/my-groups")
-    public ResponseEntity<List<GroupResponse>> getUsersGroups(
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User currentUser = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @GetMapping("/my-groups")
+        public ResponseEntity<List<GroupResponse>> getUsersGroups(
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        List<GroupResponse> userGroups = groupService.getUsersGroups(currentUser);
-        return ResponseEntity.ok(userGroups);
-    }
+                List<GroupResponse> userGroups = groupService.getUsersGroups(currentUser);
+                return ResponseEntity.ok(userGroups);
+        }
 
-    @PostMapping("/message")
-    public ResponseEntity<Void> sendGroupMessage(
-            @Valid @RequestBody SendGroupMessageRequest request,
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User sender = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @PostMapping("/message")
+        public ResponseEntity<Void> sendGroupMessage(
+                        @Valid @RequestBody SendGroupMessageRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User sender = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        groupService.sendGroupMessage(request, sender);
-        return ResponseEntity.ok().build();
-    }
+                groupService.sendGroupMessage(request, sender);
+                return ResponseEntity.ok().build();
+        }
 
-    @PutMapping
-    public ResponseEntity<GroupResponse> updateGroup(
-            @Valid @RequestBody UpdateGroupRequest request,
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User initiator = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @PutMapping
+        public ResponseEntity<GroupResponse> updateGroup(
+                        @Valid @RequestBody UpdateGroupRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User initiator = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        GroupResponse updatedGroup = groupService.updateGroup(request, initiator);
-        return ResponseEntity.ok(updatedGroup);
-    }
+                GroupResponse updatedGroup = groupService.updateGroup(request, initiator);
+                return ResponseEntity.ok(updatedGroup);
+        }
 
-    @PostMapping("/leave/{groupId}")
-    public ResponseEntity<MessageResponse> leaveGroup(
-            @PathVariable UUID groupId,
-            @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        User currentUser = userService.getUserById(userDetails.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        @PostMapping("/leave/{groupId}")
+        public ResponseEntity<MessageResponse> leaveGroup(
+                        @PathVariable UUID groupId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        MessageResponse response = groupService.leaveGroup(groupId, currentUser);
-        return ResponseEntity.ok(response);
-    }
+                MessageResponse response = groupService.leaveGroup(groupId, currentUser);
+                return ResponseEntity.ok(response);
+        }
+
+        @PostMapping("/read-receipt")
+        public ResponseEntity<Void> markAsRead(
+                        @Valid @RequestBody MarkReadRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                groupService.markAsRead(request.getGroupId(), currentUser);
+                return ResponseEntity.ok().build();
+        }
 }

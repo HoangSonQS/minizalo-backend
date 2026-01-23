@@ -7,6 +7,7 @@ import iuh.fit.se.minizalobackend.dtos.response.GroupMemberResponse;
 import iuh.fit.se.minizalobackend.dtos.response.GroupResponse;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.GroupChatMessage;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.GroupEventMessage;
+import iuh.fit.se.minizalobackend.dtos.response.websocket.ReadReceiptResponse;
 import iuh.fit.se.minizalobackend.exception.ResourceNotFoundException;
 import iuh.fit.se.minizalobackend.models.ChatRoom;
 import iuh.fit.se.minizalobackend.models.ERoomEventType;
@@ -314,6 +315,29 @@ public class GroupServiceImpl implements GroupService {
         }
 
         return new MessageResponse(responseMessage);
+    }
+
+    @Override
+    @Transactional
+    public void markAsRead(UUID groupId, User user) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        RoomMember member = roomMemberRepository.findByRoomAndUser(groupChatRoom, user)
+                .orElseThrow(() -> new IllegalArgumentException("User is not a member of this group."));
+
+        member.setLastReadAt(LocalDateTime.now());
+        roomMemberRepository.save(member);
+
+        // Broadcast ReadReceiptResponse to WebSocket
+        ReadReceiptResponse readReceipt = ReadReceiptResponse.builder()
+                .groupId(groupId)
+                .userId(user.getId())
+                .lastReadAt(member.getLastReadAt())
+                .build();
+
+        String destination = "/topic/group/" + groupId.toString() + "/read-receipts";
+        messagingTemplate.convertAndSend(destination, readReceipt);
     }
 
     private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers) {

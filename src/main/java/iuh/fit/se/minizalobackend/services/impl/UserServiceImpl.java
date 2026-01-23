@@ -144,4 +144,13 @@ public class UserServiceImpl implements UserService {
                 user.getLastSeen(),
                 user.getIsOnline());
     }
+
+    @Override
+    @Transactional
+    public void updateFcmToken(UUID userId, String token) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        user.setFcmToken(token);
+        userRepository.save(user);
+    }
 }

@@ -3,6 +3,7 @@ package iuh.fit.se.minizalobackend.controllers;
 import iuh.fit.se.minizalobackend.payload.request.UserProfileUpdateRequest;
 import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
+import iuh.fit.se.minizalobackend.services.UserPresenceService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -14,19 +15,24 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
 
     private final UserService userService;
+    private final UserPresenceService userPresenceService;
 
     // Constants for file validation
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final List<String> ALLOWED_MIME_TYPES = Arrays.asList("image/jpeg", "image/png", "image/gif");
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, UserPresenceService userPresenceService) {
         this.userService = userService;
+        this.userPresenceService = userPresenceService;
     }
 
     @GetMapping("/me")
@@ -84,5 +90,24 @@ public class UserController {
     public ResponseEntity<List<UserProfileResponse>> searchUsers(@RequestParam String q) {
         List<UserProfileResponse> users = userService.searchUsers(q);
         return ResponseEntity.ok(users);
+    }
+
+    @PutMapping("/fcm-token")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> updateFcmToken(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @RequestBody String token) {
+        userService.updateFcmToken(userDetails.getId(), token);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/status")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<Map<UUID, Boolean>> getUsersStatus(@RequestBody List<UUID> userIds) {
+        Map<UUID, Boolean> statusMap = userIds.stream()
+                .collect(Collectors.toMap(
+                        id -> id,
+                        userPresenceService::isUserOnline));
+        return ResponseEntity.ok(statusMap);
     }
 }

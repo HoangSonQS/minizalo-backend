@@ -14,11 +14,18 @@ import java.util.UUID;
 
 public interface UserService {
     void registerNewUser(SignupRequest signupRequest);
+
     UserProfileResponse getCurrentUserProfile(UserDetails userDetails);
+
     UserProfileResponse updateProfile(UserDetails userDetails, UserProfileUpdateRequest request);
+
     UserProfileResponse uploadAvatar(UserDetails userDetails, MultipartFile avatarFile) throws IOException;
+
     List<UserProfileResponse> searchUsers(String query);
+
     Optional<User> getUserById(UUID id);
+
     UserProfileResponse mapUserToUserProfileResponse(User user);
 
+    void updateFcmToken(UUID userId, String token);
 }

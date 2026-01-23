@@ -26,4 +26,6 @@ public interface GroupService {
     GroupResponse updateGroup(UpdateGroupRequest request, User initiator);
 
     MessageResponse leaveGroup(UUID groupId, User user);
+
+    void markAsRead(UUID groupId, User user);
 }

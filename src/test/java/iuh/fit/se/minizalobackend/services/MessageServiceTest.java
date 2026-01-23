@@ -3,6 +3,8 @@ package iuh.fit.se.minizalobackend.services;
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
+import iuh.fit.se.minizalobackend.repository.GroupRepository;
+import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.impl.MessageServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,6 +26,18 @@ class MessageServiceTest {
 
     @Mock
     private MessageDynamoRepository messageDynamoRepository;
+
+    @Mock
+    private GroupRepository groupRepository;
+
+    @Mock
+    private RoomMemberRepository roomMemberRepository;
+
+    @Mock
+    private UserPresenceService userPresenceService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private MessageServiceImpl messageService;
@@ -36,14 +51,17 @@ class MessageServiceTest {
         message = new MessageDynamo();
         message.setMessageId(messageId);
         message.setChatRoomId(chatRoomId);
-        message.setSenderId("user1");
+        message.setSenderId(UUID.randomUUID().toString());
+        message.setSenderName("Test User");
         message.setContent("Hello World");
         // CreatedAt is set in the service
     }
 
     @Test
     void saveMessage_Success() {
-        // The service sets the timestamp and ID if null, so we pass the object
+        // Mock group lookup to avoid NPE in triggerNotifications
+        lenient().when(groupRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
+
         MessageDynamo savedMessage = messageService.saveMessage(message);
 
         assertNotNull(savedMessage.getCreatedAt());
