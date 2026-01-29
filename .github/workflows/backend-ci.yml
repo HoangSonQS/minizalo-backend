@@ -10,7 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    # Vẫn cần Database giả lập để chạy Integration Test
     services:
       postgres:
         image: postgres:13
@@ -30,15 +29,24 @@ jobs:
         image: amazon/dynamodb-local:latest
         ports:
           - 8000:8000
+        options: >-
+          --health-cmd "true"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
       minio:
-        image: minio/minio:latest
+        image: bitnami/minio:latest
         env:
           MINIO_ROOT_USER: test
           MINIO_ROOT_PASSWORD: testtest
         ports:
           - 9000:9000
-        command: server /data
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - uses: actions/checkout@v3
@@ -51,7 +59,6 @@ jobs:
         cache: maven
         cache-dependency-path: 'pom.xml'
 
-    # Tạo file Firebase giả để code không bị lỗi khi khởi động
     - name: Create Dummy Firebase Key
       run: |
         mkdir -p src/main/resources
