@@ -2,7 +2,7 @@ package iuh.fit.se.minizalobackend.payload.request;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
+import lombok.NoArgsConstructor;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -10,18 +10,20 @@ import jakarta.validation.constraints.Size;
 
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 public class SignupRequest {
-    @NotBlank
-    @Size(min = 3, max = 20)
-    private String username;
+    @NotBlank(message = "Name is required")
+    private String name;
 
-    @NotBlank
-    @Size(max = 50)
-    @Email
+    @NotBlank(message = "Phone number is required")
+    @Pattern(regexp = "^[0-9]{10,11}$", message = "Phone must be 10-11 digits")
+    private String phone;
+
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
     private String email;
 
-    @NotBlank
-    @Size(min = 8, max = 40)
-    @Pattern(regexp = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=\\S+$).{8,}$", message = "Password must check for length, allowing weak passwords like '123456'")
+    @NotBlank(message = "Password is required")
+    @Size(min = 6, max = 40, message = "Password must be between 6 and 40 characters")
     private String password;
 }
