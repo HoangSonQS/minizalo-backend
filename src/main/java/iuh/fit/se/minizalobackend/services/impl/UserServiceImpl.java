@@ -50,11 +50,11 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void registerNewUser(SignupRequest signupRequest) {
         long startTime = System.nanoTime();
-        logger.debug("Starting registration for user: {}", signupRequest.getUsername());
+        logger.debug("Starting registration for user: {}", signupRequest.getPhone());
 
-        // Ensure indexes are created on 'username' and 'email' columns for performance
-        if (userRepository.existsByUsername(signupRequest.getUsername())) {
-            throw new IllegalArgumentException("Error: Username is already taken!");
+        // Use phone as the unique username
+        if (userRepository.existsByUsername(signupRequest.getPhone())) {
+            throw new IllegalArgumentException("Error: Phone number is already registered!");
         }
 
         if (userRepository.existsByEmail(signupRequest.getEmail())) {
@@ -63,9 +63,11 @@ public class UserServiceImpl implements UserService {
 
         // Create new user's account
         User user = new User(
-                signupRequest.getUsername(),
+                signupRequest.getPhone(),
                 signupRequest.getEmail(),
                 encoder.encode(signupRequest.getPassword()));
+
+        user.setDisplayName(signupRequest.getName());
 
         Set<Role> roles = new HashSet<>();
         Role userRole = roleRepository.findByName(ERole.ROLE_USER)
@@ -78,7 +80,7 @@ public class UserServiceImpl implements UserService {
 
         long endTime = System.nanoTime();
         long durationMillis = (endTime - startTime) / 1_000_000;
-        logger.info("User registration for {} completed in {} ms", signupRequest.getUsername(), durationMillis);
+        logger.info("User registration for {} completed in {} ms", signupRequest.getPhone(), durationMillis);
     }
 
     @Override
