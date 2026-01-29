@@ -4,6 +4,9 @@ import iuh.fit.se.minizalobackend.dtos.request.TypingIndicatorRequest;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
+import iuh.fit.se.minizalobackend.config.TestConfig;
+import org.springframework.context.annotation.Import;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@Import(TestConfig.class)
 public class WebSocketIntegrationTest {
 
     @LocalServerPort
