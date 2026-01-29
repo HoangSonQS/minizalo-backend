@@ -53,9 +53,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: builder
     container_name: minizalo-backend
     ports:
       - "8080:8080"
+    volumes:
+      - .:/app
+    command: ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.devtools.restart.enabled=true"
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./src
+          target: /app/src
+        - action: rebuild
+          path: pom.xml
     env_file:
       - ./.env
     environment:
@@ -74,9 +85,12 @@ services:
       - APP_ACCESS_TOKEN_EXPIRATION_MINUTES=${APP_ACCESS_TOKEN_EXPIRATION_MINUTES}
       - APP_REFRESH_TOKEN_EXPIRATION_DAYS=${APP_REFRESH_TOKEN_EXPIRATION_DAYS}
     depends_on:
-      - minizalo-db
-      - dynamodb-local
-      - minio
+      minizalo-db:
+        condition: service_healthy
+      dynamodb-local:
+        condition: service_started
+      minio:
+        condition: service_healthy
 
 volumes:
   minizalo-db-data:
