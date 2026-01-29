@@ -62,17 +62,18 @@ public class AuthControllerIntegrationTest {
 
         @Test
         void testUserRegistrationAndLogin() throws Exception { // 1. Register a new user
-                SignupRequest signupRequest = new SignupRequest("testuser", "test@example.com", "Password@123");
+                SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com",
+                                "Password@123");
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))
                                 .andExpect(status().isOk())
                                 .andReturn();
 
-                assertTrue(userRepository.existsByUsername("testuser"));
+                assertTrue(userRepository.existsByUsername("0987654321"));
 
                 // 2. Login with the registered user
-                LoginRequest loginRequest = new LoginRequest("testuser", "Password@123");
+                LoginRequest loginRequest = new LoginRequest("0987654321", "Password@123");
                 MvcResult loginResult = mockMvc.perform(post(AUTH_API + "/signin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(loginRequest)))
@@ -123,7 +124,8 @@ public class AuthControllerIntegrationTest {
 
         @Test
         void testDuplicateUsernameRegistration() throws Exception {
-                SignupRequest signupRequest = new SignupRequest("duplicateuser", "dup@example.com", "Password@123");
+                SignupRequest signupRequest = new SignupRequest("Duplicate User", "0123456789", "dup@example.com",
+                                "Password@123");
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))
@@ -138,7 +140,7 @@ public class AuthControllerIntegrationTest {
                 Map<String, Object> response = objectMapper.readValue(result.getResponse().getContentAsString(),
                                 new TypeReference<Map<String, Object>>() {
                                 });
-                assertEquals("Error: Username is already taken!", response.get("message"));
+                assertEquals("Error: Phone number is already registered!", response.get("message"));
         }
 
         @Test

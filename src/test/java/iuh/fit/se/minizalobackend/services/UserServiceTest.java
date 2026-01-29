@@ -42,9 +42,9 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Success_UserRole() {
-        SignupRequest signupRequest = new SignupRequest("testuser", "test@example.com", "password123");
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123");
 
-        when(userRepository.existsByUsername(signupRequest.getUsername())).thenReturn(false);
+        when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
         when(passwordEncoder.encode(signupRequest.getPassword())).thenReturn("encodedPassword");
 
@@ -56,7 +56,7 @@ class UserServiceTest {
 
         userServiceImpl.registerNewUser(signupRequest);
 
-        verify(userRepository, times(1)).existsByUsername("testuser");
+        verify(userRepository, times(1)).existsByUsername("0987654321");
         verify(userRepository, times(1)).existsByEmail("test@example.com");
         verify(passwordEncoder, times(1)).encode("password123");
         verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
@@ -65,15 +65,16 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Failure_UsernameAlreadyExists() {
-        SignupRequest signupRequest = new SignupRequest("existinguser", "test@example.com", "password123");
+        SignupRequest signupRequest = new SignupRequest("Existing User", "0987654321", "test@example.com",
+                "password123");
 
-        when(userRepository.existsByUsername(signupRequest.getUsername())).thenReturn(true);
+        when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userServiceImpl.registerNewUser(signupRequest));
 
-        assertEquals("Error: Username is already taken!", exception.getMessage());
-        verify(userRepository, times(1)).existsByUsername("existinguser");
+        assertEquals("Error: Phone number is already registered!", exception.getMessage());
+        verify(userRepository, times(1)).existsByUsername("0987654321");
         verify(userRepository, never()).existsByEmail(anyString());
         verify(passwordEncoder, never()).encode(anyString());
         verify(roleRepository, never()).findByName(any(ERole.class));
@@ -82,16 +83,17 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Failure_EmailAlreadyExists() {
-        SignupRequest signupRequest = new SignupRequest("testuser", "existing@example.com", "password123");
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "existing@example.com",
+                "password123");
 
-        when(userRepository.existsByUsername(signupRequest.getUsername())).thenReturn(false);
+        when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userServiceImpl.registerNewUser(signupRequest));
 
         assertEquals("Error: Email is already in use!", exception.getMessage());
-        verify(userRepository, times(1)).existsByUsername("testuser");
+        verify(userRepository, times(1)).existsByUsername("0987654321");
         verify(userRepository, times(1)).existsByEmail("existing@example.com");
         verify(passwordEncoder, never()).encode(anyString());
         verify(roleRepository, never()).findByName(any(ERole.class));
@@ -100,9 +102,9 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Failure_RoleNotFound() {
-        SignupRequest signupRequest = new SignupRequest("testuser", "test@example.com", "password123");
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123");
 
-        when(userRepository.existsByUsername(signupRequest.getUsername())).thenReturn(false);
+        when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
         when(roleRepository.findByName(ERole.ROLE_USER)).thenReturn(Optional.empty());
 
@@ -110,7 +112,7 @@ class UserServiceTest {
                 () -> userServiceImpl.registerNewUser(signupRequest));
 
         assertEquals("Error: User role is not found.", exception.getMessage());
-        verify(userRepository, times(1)).existsByUsername("testuser");
+        verify(userRepository, times(1)).existsByUsername("0987654321");
         verify(userRepository, times(1)).existsByEmail("test@example.com");
         verify(passwordEncoder, times(1)).encode(anyString());
         verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
