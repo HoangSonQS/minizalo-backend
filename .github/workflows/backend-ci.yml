@@ -10,8 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    # KHI BACKEND LÀ ROOT: Không cần working-directory nữa
-    
     # Vẫn cần Database giả lập để chạy Integration Test
     services:
       postgres:
@@ -27,6 +25,20 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports:
+          - 8000:8000
+
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: test
+          MINIO_ROOT_PASSWORD: testtest
+        ports:
+          - 9000:9000
+        command: server /data
 
     steps:
     - uses: actions/checkout@v3
@@ -37,7 +49,6 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
         cache: maven
-        # Sửa lại đường dẫn cache (vì pom.xml nằm ngay root)
         cache-dependency-path: 'pom.xml'
 
     # Tạo file Firebase giả để code không bị lỗi khi khởi động
@@ -54,7 +65,10 @@ jobs:
         SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
         SPRING_DATASOURCE_USERNAME: myuser
         SPRING_DATASOURCE_PASSWORD: mypassword
-      # Chạy lệnh trực tiếp, không cần cd vào thư mục con
+        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
+        MINIO_ENDPOINT: http://localhost:9000
+        MINIO_ACCESS_KEY: test
+        MINIO_SECRET_KEY: testtest
       run: ./mvnw -B package -DskipTests
 
     - name: Run Tests
@@ -62,4 +76,8 @@ jobs:
         SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
         SPRING_DATASOURCE_USERNAME: myuser
         SPRING_DATASOURCE_PASSWORD: mypassword
+        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
+        MINIO_ENDPOINT: http://localhost:9000
+        MINIO_ACCESS_KEY: test
+        MINIO_SECRET_KEY: testtest
       run: ./mvnw -B test

@@ -39,6 +39,9 @@ class MessageServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private AnalyticsService analyticsService;
+
     @InjectMocks
     private MessageServiceImpl messageService;
 
