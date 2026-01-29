@@ -1,0 +1,65 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [ main, dev, feature/* ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    # KHI BACKEND LÀ ROOT: Không cần working-directory nữa
+    
+    # Vẫn cần Database giả lập để chạy Integration Test
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: myuser
+          POSTGRES_PASSWORD: mypassword
+          POSTGRES_DB: minizalodb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+        # Sửa lại đường dẫn cache (vì pom.xml nằm ngay root)
+        cache-dependency-path: 'pom.xml'
+
+    # Tạo file Firebase giả để code không bị lỗi khi khởi động
+    - name: Create Dummy Firebase Key
+      run: |
+        mkdir -p src/main/resources
+        echo '{}' > src/main/resources/firebase-service-account.json
+
+    - name: Grant execute permission for mvnw
+      run: chmod +x mvnw
+
+    - name: Build with Maven
+      env:
+        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
+        SPRING_DATASOURCE_USERNAME: myuser
+        SPRING_DATASOURCE_PASSWORD: mypassword
+      # Chạy lệnh trực tiếp, không cần cd vào thư mục con
+      run: ./mvnw -B package -DskipTests
+
+    - name: Run Tests
+      env:
+        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
+        SPRING_DATASOURCE_USERNAME: myuser
+        SPRING_DATASOURCE_PASSWORD: mypassword
+      run: ./mvnw -B test
