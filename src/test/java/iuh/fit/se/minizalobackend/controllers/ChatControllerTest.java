@@ -77,8 +77,10 @@ public class ChatControllerTest {
     @Test
     @WithMockUser
     void recallMessage_Success() throws Exception {
+        String roomId = UUID.randomUUID().toString();
         String messageId = UUID.randomUUID().toString();
         RecallMessageRequest recallRequest = new RecallMessageRequest();
+        recallRequest.setRoomId(roomId);
         recallRequest.setMessageId(messageId);
 
         mockMvc.perform(post("/messages/recall")
@@ -86,6 +88,6 @@ public class ChatControllerTest {
                 .content(objectMapper.writeValueAsString(recallRequest)))
                 .andExpect(status().isOk());
 
-        verify(messageService).recallMessage(messageId);
+        verify(messageService).recallMessage(roomId, messageId);
     }
 }

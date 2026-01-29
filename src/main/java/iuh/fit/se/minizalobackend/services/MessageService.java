@@ -10,5 +10,11 @@ public interface MessageService {
 
     PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit);
 
-    void recallMessage(String messageId);
+    void recallMessage(String chatRoomId, String messageId);
+
+    void markMessageAsRead(String chatRoomId, String messageId, String userId);
+
+    void addReaction(String chatRoomId, String messageId, String userId, String emoji);
+
+    void pinMessage(String chatRoomId, String messageId, boolean pin);
 }
