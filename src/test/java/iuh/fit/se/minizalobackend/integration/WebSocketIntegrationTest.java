@@ -47,7 +47,8 @@ public class WebSocketIntegrationTest {
 
     @BeforeEach
     public void setup() {
-        this.URL = "ws://localhost:" + port + "/ws";
+        // SockJS enables raw websocket at /ws/websocket
+        this.URL = "ws://localhost:" + port + "/ws/websocket";
         this.stompClient = new WebSocketStompClient(new StandardWebSocketClient());
         this.stompClient.setMessageConverter(new MappingJackson2MessageConverter());
 
