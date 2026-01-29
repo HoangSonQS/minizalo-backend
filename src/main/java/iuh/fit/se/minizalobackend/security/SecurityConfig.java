@@ -1,13 +1,13 @@
 package iuh.fit.se.minizalobackend.security;
 
-import iuh.fit.se.minizalobackend.security.services.UserDetailsServiceImpl;
+import iuh.fit.se.minizalobackend.services.impl.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
-import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -21,9 +21,14 @@ import org.springframework.security.config.Customizer;
 
 import java.util.Arrays;
 
+import org.springframework.beans.factory.annotation.Value;
+
 @Configuration
-@EnableGlobalMethodSecurity(prePostEnabled = true)
+@EnableMethodSecurity
 public class SecurityConfig {
+
+    @Value("${app.security.bcrypt.strength:10}")
+    private int bcryptStrength;
 
     @Autowired
     UserDetailsServiceImpl userDetailsService;
@@ -53,13 +58,18 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(bcryptStrength);
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("*")); // Allow all origins for development
+        configuration.setAllowedOrigins(Arrays.asList(
+                "http://localhost:3000",
+                "http://localhost:8081",
+                "http://10.0.2.2:8081",
+                "http://localhost:19000",
+                "http://localhost:19006"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Allow all headers
         configuration.setAllowCredentials(true);
@@ -71,15 +81,16 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())
-            .cors(Customizer.withDefaults()) // Enable CORS using the bean
-            .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -> csrf.disable())
+                .cors(Customizer.withDefaults()) // Enable CORS using the bean
+                .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/v3/api-docs/**").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/actuator/**").hasRole("ADMIN")
-                        .anyRequest().authenticated()
-                );
+                        .requestMatchers("/api/auth/signin", "/api/auth/signup", "/api/auth/refreshtoken",
+                                "/v3/api-docs/**", "/ws/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
+                        .permitAll()
+                        .requestMatchers("/api/auth/logout").authenticated()
+                        .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());
 

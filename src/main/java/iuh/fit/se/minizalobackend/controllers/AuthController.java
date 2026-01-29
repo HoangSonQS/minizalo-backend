@@ -9,7 +9,7 @@ import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.payload.response.TokenRefreshResponse;
 import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
-import iuh.fit.se.minizalobackend.security.services.RefreshTokenService;
+import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.UserService;
 import jakarta.validation.Valid;
@@ -20,9 +20,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -30,10 +27,10 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
-    private final UserService userService; // Inject UserService
+    private final UserService userService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
-                          RefreshTokenService refreshTokenService, UserService userService) {
+            RefreshTokenService refreshTokenService, UserService userService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
@@ -47,26 +44,16 @@ public class AuthController {
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        String jwt = jwtTokenProvider.generateAccessToken(authentication);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
+        String jwt = jwtTokenProvider.generateAccessToken(userDetails.getId().toString());
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId().toString());
 
-        List<String> roles = userDetails.getAuthorities().stream()
-                .map(item -> item.getAuthority())
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken(), roles));
+        return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken()));
     }
 
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest) {
-        try {
-            userService.registerNewUser(signupRequest);
-            return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(new MessageResponse(e.getMessage()));
-        }
+        userService.registerNewUser(signupRequest);
+        return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
     }
 
     @PostMapping("/refreshtoken")
@@ -75,11 +62,10 @@ public class AuthController {
 
         return refreshTokenService.findByToken(requestRefreshToken)
                 .map(refreshTokenService::verifyExpiration)
-                .map(refreshToken -> {
-                    RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(refreshToken);
-                    UserDetailsImpl userDetails = UserDetailsImpl.build(newRefreshToken.getUser());
-                    String accessToken = jwtTokenProvider.generateAccessToken(
-                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities()));
+                .map(refreshTokenService::rotateRefreshToken)
+                .map(newRefreshToken -> {
+                    String accessToken = jwtTokenProvider
+                            .generateAccessToken(newRefreshToken.getUser().getId().toString());
                     return ResponseEntity.ok(new TokenRefreshResponse(accessToken, newRefreshToken.getToken()));
                 })
                 .orElseThrow(() -> new TokenRefreshException(requestRefreshToken,
@@ -88,8 +74,9 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logoutUser() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        refreshTokenService.deleteByUserId(userDetails.getId());
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication()
+                .getPrincipal();
+        refreshTokenService.deleteByUserId(userDetails.getId().toString());
         return ResponseEntity.ok(new MessageResponse("Log out successful!"));
     }
 }
