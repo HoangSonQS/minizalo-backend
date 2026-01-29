@@ -12,8 +12,6 @@ import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
 import java.security.Key;
 import java.util.Date;
-import java.util.List;
-import java.util.stream.Collectors;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -40,22 +38,21 @@ public class JwtTokenProvider {
 
     public String generateAccessToken(Authentication authentication) {
         UserDetailsImpl userPrincipal = (UserDetailsImpl) authentication.getPrincipal();
-        List<String> roles = userPrincipal.getAuthorities().stream()
-                .map(item -> item.getAuthority())
-                .collect(Collectors.toList());
+        return generateAccessToken(userPrincipal.getId().toString());
+    }
 
+    public String generateAccessToken(String userId) {
         return Jwts.builder()
-                .setSubject(userPrincipal.getId().toString()) // Use user ID as subject
-                .claim("roles", roles) // Add roles as a claim
+                .setSubject(userId)
                 .setIssuedAt(new Date())
                 .setExpiration(Date.from(Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES)))
                 .signWith(key, SignatureAlgorithm.HS512)
                 .compact();
     }
 
-    public String generateRefreshToken(UserDetailsImpl userPrincipal) {
+    public String generateRefreshToken(String userId) {
         return Jwts.builder()
-                .setSubject(userPrincipal.getId().toString())
+                .setSubject(userId)
                 .setIssuedAt(new Date())
                 .setExpiration(Date.from(Instant.now().plus(refreshTokenExpirationDays, ChronoUnit.DAYS)))
                 .signWith(key, SignatureAlgorithm.HS512)

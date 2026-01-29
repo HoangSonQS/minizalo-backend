@@ -13,8 +13,8 @@ import java.util.UUID;
 @AllArgsConstructor
 public class FriendResponse {
     private UUID id;
-    private UserResponse user; // The user who sent/received the request
-    private UserResponse friend; // The target friend
+    private UserProfileResponse user;
+    private UserProfileResponse friend;
     private EFriendStatus status;
     private LocalDateTime createdAt;
 }

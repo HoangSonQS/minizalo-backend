@@ -5,9 +5,11 @@ services:
     image: postgres:13-alpine
     container_name: minizalo-db
     environment:
-      POSTGRES_DB: minizalo_db
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      - POSTGRES_DB=minizalo_db
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    env_file:
+      - ./.env
     ports:
       - "5432:5432"
     volumes:
@@ -34,13 +36,15 @@ services:
       - "9000:9000"
       - "9001:9001" # MinIO Console port
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    env_file:
+      - ./.env
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://minio:9000/minio/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -49,30 +53,44 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: builder
     container_name: minizalo-backend
     ports:
       - "8080:8080"
+    volumes:
+      - .:/app
+    command: ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.devtools.restart.enabled=true"
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./src
+          target: /app/src
+        - action: rebuild
+          path: pom.xml
     env_file:
-      - .env
+      - ./.env
     environment:
-      SPRING_DATASOURCE_URL: ${DB_URL}
-      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      AWS_DYNAMODB_ENDPOINT: ${AWS_DYNAMODB_ENDPOINT}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_REGION: ${AWS_REGION}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME}
-      APP_JWT_SECRET: ${JWT_SECRET_KEY}
-      APP_ACCESS_TOKEN_EXPIRATION_MINUTES: ${APP_ACCESS_TOKEN_EXPIRATION_MINUTES}
-      APP_REFRESH_TOKEN_EXPIRATION_DAYS: ${APP_REFRESH_TOKEN_EXPIRATION_DAYS}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://minizalo-db:5432/minizalo_db
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - AWS_DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+      - APP_JWT_SECRET=${JWT_SECRET_KEY}
+      - APP_ACCESS_TOKEN_EXPIRATION_MINUTES=${APP_ACCESS_TOKEN_EXPIRATION_MINUTES}
+      - APP_REFRESH_TOKEN_EXPIRATION_DAYS=${APP_REFRESH_TOKEN_EXPIRATION_DAYS}
     depends_on:
-      - minizalo-db
-      - dynamodb-local
-      - minio
+      minizalo-db:
+        condition: service_healthy
+      dynamodb-local:
+        condition: service_started
+      minio:
+        condition: service_healthy
 
 volumes:
   minizalo-db-data:

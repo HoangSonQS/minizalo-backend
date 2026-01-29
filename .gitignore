@@ -4,6 +4,8 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+application-test.properties
+
 ### STS ###
 .apt_generated
 .classpath
@@ -33,7 +35,14 @@ build/
 .vscode/
 
 .env
+.env.example
 .DS_Store
 data/
 *.log
 /idea/
+
+# Firebase
+src/main/resources/firebase-service-account.json
+firebase-service-account.json
+*.json
+
