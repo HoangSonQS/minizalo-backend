@@ -62,6 +62,18 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
         }
     }
 
+    @Override
+    public Optional<MessageDynamo> getMessage(String chatRoomId, String messageId) {
+        QueryConditional queryConditional = QueryConditional
+                .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
+
+        var pagedResult = messageTable.query(r -> r.queryConditional(queryConditional));
+
+        return pagedResult.items().stream()
+                .filter(m -> messageId.equals(m.getMessageId()))
+                .findFirst();
+    }
+
     private String serializeExclusiveStartKey(Map<String, AttributeValue> key) {
         if (key == null || key.isEmpty()) {
             return null;

@@ -2,6 +2,7 @@ package iuh.fit.se.minizalobackend.services.impl;
 
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
+import iuh.fit.se.minizalobackend.models.MessageReaction;
 import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
@@ -9,12 +10,16 @@ import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.NotificationService;
 import iuh.fit.se.minizalobackend.services.UserPresenceService;
 import iuh.fit.se.minizalobackend.services.MessageService;
+import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -27,6 +32,8 @@ public class MessageServiceImpl implements MessageService {
     private final RoomMemberRepository roomMemberRepository;
     private final UserPresenceService userPresenceService;
     private final NotificationService notificationService;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final AnalyticsService analyticsService;
 
     @Override
     public MessageDynamo saveMessage(MessageDynamo message) {
@@ -39,6 +46,10 @@ public class MessageServiceImpl implements MessageService {
         }
         log.debug("Saving message to DynamoDB for chat room: {}", message.getChatRoomId());
         messageDynamoRepository.save(message);
+
+        // Log activity
+        analyticsService.logActivity(UUID.fromString(message.getSenderId()), "MESSAGE_SENT",
+                "Message sent to room: " + message.getChatRoomId());
 
         // Trigger notifications for offline members
         triggerNotifications(message);
@@ -83,7 +94,90 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public void recallMessage(String messageId) {
-        log.warn("recallMessage is not yet implemented for DynamoDB!");
+    public void recallMessage(String chatRoomId, String messageId) {
+        messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
+            Instant createdAt = Instant.parse(message.getCreatedAt());
+            Instant now = Instant.now();
+
+            // Allow recall only within 24 hours
+            if (now.isBefore(createdAt.plus(24, java.time.temporal.ChronoUnit.HOURS))) {
+                message.setRecalled(true);
+                message.setRecalledAt(now.toString());
+                messageDynamoRepository.save(message);
+
+                // Broadcast recall event
+                String destination = "/topic/chat/" + chatRoomId + "/recall";
+                messagingTemplate.convertAndSend(destination, Map.of(
+                        "messageId", messageId,
+                        "recalledAt", message.getRecalledAt()));
+
+                log.info("Message {} recalled in room {}", messageId, chatRoomId);
+            } else {
+                log.warn("Recall failed: Message {} is older than 24 hours", messageId);
+                throw new IllegalArgumentException("Cannot recall message after 24 hours");
+            }
+        });
+    }
+
+    @Override
+    public void markMessageAsRead(String chatRoomId, String messageId, String userId) {
+        messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
+            if (message.getReadBy() == null) {
+                message.setReadBy(new ArrayList<>());
+            }
+            if (!message.getReadBy().contains(userId)) {
+                message.getReadBy().add(userId);
+                message.setRead(true);
+                messageDynamoRepository.save(message);
+
+                // Broadcast read receipt
+                String destination = "/topic/chat/" + chatRoomId + "/read";
+                messagingTemplate.convertAndSend(destination, Map.of(
+                        "messageId", messageId,
+                        "userId", userId,
+                        "readAt", Instant.now().toString()));
+            }
+        });
+    }
+
+    @Override
+    public void addReaction(String chatRoomId, String messageId, String userId, String emoji) {
+        messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
+            if (message.getReactions() == null) {
+                message.setReactions(new ArrayList<>());
+            }
+            // Remove existing reaction from this user if any
+            message.getReactions().removeIf(r -> r.getUserId().equals(userId));
+
+            message.getReactions().add(MessageReaction.builder()
+                    .userId(userId)
+                    .emoji(emoji)
+                    .build());
+
+            messageDynamoRepository.save(message);
+
+            // Broadcast reaction
+            String destination = "/topic/chat/" + chatRoomId + "/reaction";
+            messagingTemplate.convertAndSend(destination, Map.of(
+                    "messageId", messageId,
+                    "userId", userId,
+                    "emoji", emoji));
+        });
+    }
+
+    @Override
+    public void pinMessage(String chatRoomId, String messageId, boolean pin) {
+        messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
+            message.setPinned(pin);
+            messageDynamoRepository.save(message);
+
+            // Broadcast pin event
+            String destination = "/topic/chat/" + chatRoomId + "/pin";
+            messagingTemplate.convertAndSend(destination, Map.of(
+                    "messageId", messageId,
+                    "isPinned", pin));
+
+            log.info("Message {} {} in room {}", messageId, pin ? "pinned" : "unpinned", chatRoomId);
+        });
     }
 }

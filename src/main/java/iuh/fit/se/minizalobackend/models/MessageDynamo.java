@@ -21,6 +21,12 @@ public class MessageDynamo {
     private String type;
     private String senderName;
     private List<String> attachments;
+    private boolean isRead;
+    private List<String> readBy; // List of user IDs for group chats
+    private List<MessageReaction> reactions;
+    private boolean isRecalled;
+    private String recalledAt;
+    private boolean isPinned;
 
     @DynamoDbPartitionKey
     public String getChatRoomId() {
