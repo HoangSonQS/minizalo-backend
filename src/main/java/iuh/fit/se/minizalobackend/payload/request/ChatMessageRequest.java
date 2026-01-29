@@ -6,10 +6,12 @@ import lombok.Data;
 
 @Data
 public class ChatMessageRequest {
-    @NotBlank
+    @NotBlank(message = "Receiver ID is required")
     private String receiverId;
 
-    @NotBlank
+    @NotBlank(message = "Message content is required")
     @Size(max = 1000, message = "Content must be less than 1000 characters")
     private String content;
+
+    private String replyToMessageId;
 }

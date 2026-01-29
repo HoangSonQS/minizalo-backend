@@ -2,6 +2,7 @@ package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.dtos.request.PinMessageRequest;
 import iuh.fit.se.minizalobackend.dtos.request.ReadReceiptRequest;
+import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.dtos.request.TypingIndicatorRequest;
 import iuh.fit.se.minizalobackend.dtos.request.ReactionRequest;
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
@@ -36,7 +37,8 @@ public class ChatController {
     @MessageMapping("/chat.send")
     public void sendMessage(@Payload @Valid ChatMessageRequest chatMessageRequest, Principal principal) {
         String senderId = getUserIdFromPrincipal(principal);
-        log.info("Received message from user: {} to user: {}", senderId, chatMessageRequest.getReceiverId());
+        log.info("Received message from user: {} to room: {}", senderId, chatMessageRequest.getReceiverId());
+        messageService.processMessage(chatMessageRequest, senderId);
     }
 
     @MessageMapping("/chat.typing")
@@ -97,6 +99,19 @@ public class ChatController {
             }
         }
         return principal.getName();
+    }
+
+    @PostMapping("/api/chat/forward")
+    public ResponseEntity<MessageDynamo> forwardMessage(
+            @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.ForwardMessageRequest request,
+            Principal principal) {
+        String senderId = getUserIdFromPrincipal(principal);
+        MessageDynamo forwarded = messageService.forwardMessage(
+                request.getOriginalRoomId(),
+                request.getOriginalMessageId(),
+                request.getTargetRoomId(),
+                senderId);
+        return ResponseEntity.ok(forwarded);
     }
 
     @PostMapping("/messages/recall")

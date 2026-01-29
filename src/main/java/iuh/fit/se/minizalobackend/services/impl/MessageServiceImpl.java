@@ -2,6 +2,7 @@ package iuh.fit.se.minizalobackend.services.impl;
 
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
+import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
 import iuh.fit.se.minizalobackend.models.MessageReaction;
 import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
@@ -11,6 +12,8 @@ import iuh.fit.se.minizalobackend.services.NotificationService;
 import iuh.fit.se.minizalobackend.services.UserPresenceService;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.services.AnalyticsService;
+import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.models.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -34,6 +37,7 @@ public class MessageServiceImpl implements MessageService {
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
     private final AnalyticsService analyticsService;
+    private final UserRepository userRepository;
 
     @Override
     public MessageDynamo saveMessage(MessageDynamo message) {
@@ -53,6 +57,71 @@ public class MessageServiceImpl implements MessageService {
 
         // Trigger notifications for offline members
         triggerNotifications(message);
+
+        return message;
+    }
+
+    @Override
+    public MessageDynamo forwardMessage(String originalRoomId, String originalMessageId, String targetRoomId,
+            String senderId) {
+        MessageDynamo originalMessage = messageDynamoRepository.getMessage(originalRoomId, originalMessageId)
+                .orElseThrow(() -> new IllegalArgumentException("Original message not found"));
+
+        User sender = userRepository.findById(UUID.fromString(senderId))
+                .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
+
+        MessageDynamo forwardedMessage = new MessageDynamo();
+        forwardedMessage.setMessageId(UUID.randomUUID().toString());
+        forwardedMessage.setChatRoomId(targetRoomId);
+        forwardedMessage.setSenderId(senderId);
+        forwardedMessage
+                .setSenderName(sender.getDisplayName() != null ? sender.getDisplayName() : sender.getUsername());
+        forwardedMessage.setContent(originalMessage.getContent());
+        forwardedMessage.setType(originalMessage.getType());
+        forwardedMessage.setAttachments(originalMessage.getAttachments());
+        forwardedMessage.setCreatedAt(Instant.now().toString());
+        forwardedMessage.setRead(false);
+        forwardedMessage.setReadBy(new ArrayList<>());
+        forwardedMessage.setReactions(new ArrayList<>());
+        forwardedMessage.setRecalled(false);
+        forwardedMessage.setPinned(false);
+
+        messageDynamoRepository.save(forwardedMessage);
+
+        // Broad-cast to target room
+        String destination = "/topic/chat/" + targetRoomId;
+        messagingTemplate.convertAndSend(destination, forwardedMessage);
+
+        // Log activity
+        analyticsService.logActivity(UUID.fromString(senderId), "MESSAGE_FORWARDED",
+                "Forwarded message " + originalMessageId + " to room " + targetRoomId);
+
+        return forwardedMessage;
+    }
+
+    @Override
+    public MessageDynamo processMessage(ChatMessageRequest request, String senderId) {
+        User sender = userRepository.findById(UUID.fromString(senderId))
+                .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
+
+        MessageDynamo message = new MessageDynamo();
+        message.setMessageId(UUID.randomUUID().toString());
+        message.setChatRoomId(request.getReceiverId()); // In this app roomId = receiverId for 1:1 or groupId
+        message.setSenderId(senderId);
+        message.setSenderName(sender.getDisplayName() != null ? sender.getDisplayName() : sender.getUsername());
+        message.setContent(request.getContent());
+        message.setType("TEXT"); // Default for now
+        message.setCreatedAt(Instant.now().toString());
+        message.setReplyToMessageId(request.getReplyToMessageId());
+        message.setRead(false);
+        message.setReadBy(new ArrayList<>());
+        message.setReactions(new ArrayList<>());
+
+        saveMessage(message);
+
+        // Broadcast to room
+        String destination = "/topic/chat/" + message.getChatRoomId();
+        messagingTemplate.convertAndSend(destination, message);
 
         return message;
     }
