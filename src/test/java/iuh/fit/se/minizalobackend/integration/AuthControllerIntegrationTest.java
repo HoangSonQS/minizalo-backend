@@ -1,4 +1,4 @@
-package iuh.fit.se.minizalobackend;
+package iuh.fit.se.minizalobackend.integration;
 
 import org.springframework.boot.test.mock.mockito.MockBean;
 import io.minio.MinioClient;
