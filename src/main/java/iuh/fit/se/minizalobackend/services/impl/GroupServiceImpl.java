@@ -22,6 +22,7 @@ import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.GroupService;
 import iuh.fit.se.minizalobackend.services.MessageService;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -221,7 +222,7 @@ public class GroupServiceImpl implements GroupService {
         message.setSenderId(sender.getId().toString());
         message.setSenderName(sender.getUsername());
         message.setContent(request.getContent());
-        message.setType("TEXT");
+        message.setType(AppConstants.MESSAGE_TYPE_TEXT);
 
         MessageDynamo savedMessage = messageService.saveMessage(message);
 

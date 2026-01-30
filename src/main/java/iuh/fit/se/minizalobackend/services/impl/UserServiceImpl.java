@@ -10,6 +10,8 @@ import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.MinioService;
 import iuh.fit.se.minizalobackend.services.UserService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,32 +27,21 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class UserServiceImpl implements UserService {
-
-    private static final Logger logger = LoggerFactory.getLogger(UserServiceImpl.class);
 
     private final UserRepository userRepository;
     private final MinioService minioService;
     private final PasswordEncoder encoder;
     private final RoleRepository roleRepository;
 
-    public UserServiceImpl(UserRepository userRepository, MinioService minioService, PasswordEncoder encoder,
-            RoleRepository roleRepository) {
-        this.userRepository = userRepository;
-        this.minioService = minioService;
-        this.encoder = encoder;
-        this.roleRepository = roleRepository;
-    }
-
     @Override
     @Transactional
     public void registerNewUser(SignupRequest signupRequest) {
         long startTime = System.nanoTime();
-        logger.debug("Starting registration for user: {}", signupRequest.getPhone());
+        log.debug("Starting registration for user: {}", signupRequest.getPhone());
 
         // Use phone as the unique username
         if (userRepository.existsByUsername(signupRequest.getPhone())) {
@@ -80,7 +71,7 @@ public class UserServiceImpl implements UserService {
 
         long endTime = System.nanoTime();
         long durationMillis = (endTime - startTime) / 1_000_000;
-        logger.info("User registration for {} completed in {} ms", signupRequest.getPhone(), durationMillis);
+        log.info("User registration for {} completed in {} ms", signupRequest.getPhone(), durationMillis);
     }
 
     @Override

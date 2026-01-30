@@ -1,13 +1,14 @@
 package iuh.fit.se.minizalobackend.services.impl;
 
-import iuh.fit.se.minizalobackend.payload.response.FriendResponse; // Updated import
-import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse; // New import
+import iuh.fit.se.minizalobackend.payload.response.FriendResponse;
+import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
 import iuh.fit.se.minizalobackend.models.EFriendStatus;
 import iuh.fit.se.minizalobackend.models.Friend;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
 import iuh.fit.se.minizalobackend.services.FriendService;
 import iuh.fit.se.minizalobackend.services.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,15 +19,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class FriendServiceImpl implements FriendService {
 
     private final FriendRepository friendRepository;
     private final UserService userService;
-
-    public FriendServiceImpl(FriendRepository friendRepository, UserService userService) {
-        this.friendRepository = friendRepository;
-        this.userService = userService;
-    }
 
     @Override
     @Transactional
@@ -174,8 +171,10 @@ public class FriendServiceImpl implements FriendService {
     // This method is private and not part of the interface, but it needs to use the
     // correct UserResponse
     private FriendResponse mapFriendToFriendResponse(Friend friend) {
-        UserProfileResponse user = userService.mapUserToUserProfileResponse(friend.getUser()); // Changed to UserProfileResponse
-        UserProfileResponse friendUser = userService.mapUserToUserProfileResponse(friend.getFriend()); // Changed to UserProfileResponse
+        UserProfileResponse user = userService.mapUserToUserProfileResponse(friend.getUser()); // Changed to
+                                                                                               // UserProfileResponse
+        UserProfileResponse friendUser = userService.mapUserToUserProfileResponse(friend.getFriend()); // Changed to
+                                                                                                       // UserProfileResponse
         return new FriendResponse(friend.getId(), user, friendUser, friend.getStatus(), friend.getCreatedAt());
     }
 }

@@ -4,6 +4,7 @@ import iuh.fit.se.minizalobackend.models.UserActivity;
 import iuh.fit.se.minizalobackend.repository.UserActivityRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.AnalyticsService;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,7 +47,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     public Map<String, Object> getMessageVolumeStats(LocalDateTime since) {
         Map<String, Object> stats = new HashMap<>();
-        long totalMessages = activityRepository.countByActivityTypeAndTimestampAfter("MESSAGE_SENT", since);
+        long totalMessages = activityRepository.countByActivityTypeAndTimestampAfter(AppConstants.ACTIVITY_MESSAGE_SENT,
+                since);
         stats.put("totalMessages", totalMessages);
 
         // Time series data
