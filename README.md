@@ -9,7 +9,7 @@
 
 ## 🏗️ Architecture Highlights
 
-The system leverages a hybrid approach to data storage to optimize performance:
+The system uses a **Modular Monolith** architecture for simplicity and ease of development, while leveraging specialized databases:
 *   **PostgreSQL (Relational):** Manages structured data requiring ACID transactions such as Users, Friendships, Group Memberships, and Auth Credentials.
 *   **DynamoDB (NoSQL):** Handles the high-volume, write-heavy workload of Chat History and Message Logs, ensuring horizontal scalability.
 
