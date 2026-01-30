@@ -20,7 +20,7 @@ public class MessageDynamo {
     private String content;
     private String type;
     private String senderName;
-    private List<String> attachments;
+    private List<Attachment> attachments;
     private boolean isRead;
     private List<String> readBy; // List of user IDs for group chats
     private List<MessageReaction> reactions;
