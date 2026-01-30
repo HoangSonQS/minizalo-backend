@@ -49,6 +49,28 @@ services:
       timeout: 10s
       retries: 3
 
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc config host add myminio http://minio:9000 \"$$MINIO_ACCESS_KEY\" \"$$MINIO_SECRET_KEY\"; do echo 'Waiting...'; sleep 1; done;
+      /usr/bin/mc mb myminio/\"$$MINIO_BUCKET_NAME\" || true;
+      /usr/bin/mc anonymous set public myminio/\"$$MINIO_BUCKET_NAME\";
+      "
+    env_file:
+      - ./.env
+
+  redis:
+    image: redis:alpine
+    container_name: minizalo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
   minizalo-backend:
     build:
       context: .
@@ -96,3 +118,4 @@ volumes:
   minizalo-db-data:
   dynamodb-data:
   minio-data:
+  redis-data:

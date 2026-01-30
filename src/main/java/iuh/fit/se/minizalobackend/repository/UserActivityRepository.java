@@ -16,4 +16,14 @@ public interface UserActivityRepository extends JpaRepository<UserActivity, UUID
 
     @Query("SELECT COUNT(ua) FROM UserActivity ua WHERE ua.activityType = :type AND ua.timestamp >= :since")
     long countByActivityTypeAndTimestampAfter(String type, LocalDateTime since);
+
+    @Query("SELECT FUNCTION('DATE', ua.timestamp) as date, COUNT(ua) as count FROM UserActivity ua " +
+            "WHERE ua.activityType = 'MESSAGE_SENT' AND ua.timestamp >= :since " +
+            "GROUP BY FUNCTION('DATE', ua.timestamp) ORDER BY date")
+    List<Object[]> countMessagesPerDay(LocalDateTime since);
+
+    @Query("SELECT FUNCTION('DATE', ua.timestamp) as date, COUNT(DISTINCT ua.user) as count FROM UserActivity ua " +
+            "WHERE ua.timestamp >= :since " +
+            "GROUP BY FUNCTION('DATE', ua.timestamp) ORDER BY date")
+    List<Object[]> countActiveUsersPerDay(LocalDateTime since);
 }
