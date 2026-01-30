@@ -110,7 +110,24 @@ public class MessageServiceImpl implements MessageService {
         message.setSenderId(senderId);
         message.setSenderName(sender.getDisplayName() != null ? sender.getDisplayName() : sender.getUsername());
         message.setContent(request.getContent());
-        message.setType("TEXT"); // Default for now
+
+        message.setAttachments(request.getAttachments());
+        if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
+            String mimeType = request.getAttachments().get(0).getType();
+            if (mimeType != null) {
+                if (mimeType.toLowerCase().startsWith("image")) {
+                    message.setType("IMAGE");
+                } else if (mimeType.toLowerCase().startsWith("video")) {
+                    message.setType("VIDEO");
+                } else {
+                    message.setType("DOCUMENT");
+                }
+            } else {
+                message.setType("FILE");
+            }
+        } else {
+            message.setType("TEXT");
+        }
         message.setCreatedAt(Instant.now().toString());
         message.setReplyToMessageId(request.getReplyToMessageId());
         message.setRead(false);
