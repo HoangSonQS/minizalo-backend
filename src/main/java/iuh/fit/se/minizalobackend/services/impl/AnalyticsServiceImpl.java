@@ -4,6 +4,7 @@ import iuh.fit.se.minizalobackend.models.UserActivity;
 import iuh.fit.se.minizalobackend.repository.UserActivityRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.AnalyticsService;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,16 +47,30 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     public Map<String, Object> getMessageVolumeStats(LocalDateTime since) {
         Map<String, Object> stats = new HashMap<>();
-        long messageSentCount = activityRepository.countByActivityTypeAndTimestampAfter("MESSAGE_SENT", since);
-        stats.put("messagesSent", messageSentCount);
+        long totalMessages = activityRepository.countByActivityTypeAndTimestampAfter(AppConstants.ACTIVITY_MESSAGE_SENT,
+                since);
+        stats.put("totalMessages", totalMessages);
+
+        // Time series data
+        stats.put("dailyVolume", activityRepository.countMessagesPerDay(since).stream()
+                .map(row -> Map.of("date", row[0].toString(), "count", row[1]))
+                .toList());
         return stats;
     }
 
     @Override
     public Map<String, Object> getActiveUserStats(int limit) {
         Map<String, Object> stats = new HashMap<>();
-        // Placeholder for active users logic
-        stats.put("activeUsersCount", activityRepository.count());
+        LocalDateTime since = LocalDateTime.now().minusDays(30); // Default lookback 30 days
+
+        stats.put("currentActiveUsers",
+                activityRepository.countActiveUsersPerDay(LocalDateTime.now().minusDays(1)).size()); // Valid simplistic
+                                                                                                     // 'today' count
+
+        // Time series
+        stats.put("dailyActiveUsers", activityRepository.countActiveUsersPerDay(since).stream()
+                .map(row -> Map.of("date", row[0].toString(), "count", row[1]))
+                .toList());
         return stats;
     }
 }

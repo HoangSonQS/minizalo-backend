@@ -14,6 +14,7 @@ import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.models.User;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -52,7 +53,7 @@ public class MessageServiceImpl implements MessageService {
         messageDynamoRepository.save(message);
 
         // Log activity
-        analyticsService.logActivity(UUID.fromString(message.getSenderId()), "MESSAGE_SENT",
+        analyticsService.logActivity(UUID.fromString(message.getSenderId()), AppConstants.ACTIVITY_MESSAGE_SENT,
                 "Message sent to room: " + message.getChatRoomId());
 
         // Trigger notifications for offline members
@@ -93,7 +94,7 @@ public class MessageServiceImpl implements MessageService {
         messagingTemplate.convertAndSend(destination, forwardedMessage);
 
         // Log activity
-        analyticsService.logActivity(UUID.fromString(senderId), "MESSAGE_FORWARDED",
+        analyticsService.logActivity(UUID.fromString(senderId), AppConstants.ACTIVITY_MESSAGE_FORWARDED,
                 "Forwarded message " + originalMessageId + " to room " + targetRoomId);
 
         return forwardedMessage;
@@ -112,22 +113,7 @@ public class MessageServiceImpl implements MessageService {
         message.setContent(request.getContent());
 
         message.setAttachments(request.getAttachments());
-        if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
-            String mimeType = request.getAttachments().get(0).getType();
-            if (mimeType != null) {
-                if (mimeType.toLowerCase().startsWith("image")) {
-                    message.setType("IMAGE");
-                } else if (mimeType.toLowerCase().startsWith("video")) {
-                    message.setType("VIDEO");
-                } else {
-                    message.setType("DOCUMENT");
-                }
-            } else {
-                message.setType("FILE");
-            }
-        } else {
-            message.setType("TEXT");
-        }
+        message.setType(determineMessageType(request));
         message.setCreatedAt(Instant.now().toString());
         message.setReplyToMessageId(request.getReplyToMessageId());
         message.setRead(false);
@@ -265,5 +251,21 @@ public class MessageServiceImpl implements MessageService {
 
             log.info("Message {} {} in room {}", messageId, pin ? "pinned" : "unpinned", chatRoomId);
         });
+    }
+
+    private String determineMessageType(ChatMessageRequest request) {
+        if (request.getAttachments() == null || request.getAttachments().isEmpty()) {
+            return AppConstants.MESSAGE_TYPE_TEXT;
+        }
+        String mimeType = request.getAttachments().get(0).getType();
+        if (mimeType == null)
+            return AppConstants.MESSAGE_TYPE_FILE;
+
+        String lowerMime = mimeType.toLowerCase();
+        if (lowerMime.startsWith("image"))
+            return AppConstants.MESSAGE_TYPE_IMAGE;
+        if (lowerMime.startsWith("video"))
+            return AppConstants.MESSAGE_TYPE_VIDEO;
+        return AppConstants.MESSAGE_TYPE_DOCUMENT;
     }
 }
