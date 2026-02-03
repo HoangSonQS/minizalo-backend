@@ -1,5 +1,6 @@
 package iuh.fit.se.minizalobackend.services.impl;
 
+import iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest;
 import iuh.fit.se.minizalobackend.models.ERole;
 import iuh.fit.se.minizalobackend.models.Role;
 import iuh.fit.se.minizalobackend.models.User;
@@ -145,5 +146,36 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
         user.setFcmToken(token);
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(UUID userId, ChangePasswordRequest request) {
+        log.info("Changing password for user: {}", userId);
+
+        // Validate confirm password matches
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("New password and confirm password do not match");
+        }
+
+        // Get user
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        // Validate old password
+        if (!encoder.matches(request.getOldPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("Old password is incorrect");
+        }
+
+        // Check new password is different from old password
+        if (encoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("New password must be different from old password");
+        }
+
+        // Update password
+        user.setPassword(encoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        log.info("Password changed successfully for user: {}", userId);
     }
 }

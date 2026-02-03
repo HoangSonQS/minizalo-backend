@@ -1,5 +1,6 @@
 package iuh.fit.se.minizalobackend.services;
 
+import iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.payload.request.UserProfileUpdateRequest;
@@ -28,4 +29,6 @@ public interface UserService {
     UserProfileResponse mapUserToUserProfileResponse(User user);
 
     void updateFcmToken(UUID userId, String token);
+
+    void changePassword(UUID userId, ChangePasswordRequest request);
 }

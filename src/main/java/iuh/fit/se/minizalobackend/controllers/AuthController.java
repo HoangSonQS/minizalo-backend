@@ -1,5 +1,6 @@
 package iuh.fit.se.minizalobackend.controllers;
 
+import iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest;
 import iuh.fit.se.minizalobackend.exception.TokenRefreshException;
 import iuh.fit.se.minizalobackend.models.RefreshToken;
 import iuh.fit.se.minizalobackend.payload.request.LoginRequest;
@@ -17,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -78,5 +80,13 @@ public class AuthController {
                 .getPrincipal();
         refreshTokenService.deleteByUserId(userDetails.getId().toString());
         return ResponseEntity.ok(new MessageResponse("Log out successful!"));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            @AuthenticationPrincipal UserDetailsImpl userDetails) {
+        userService.changePassword(userDetails.getId(), request);
+        return ResponseEntity.ok(new MessageResponse("Password changed successfully!"));
     }
 }
