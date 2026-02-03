@@ -26,8 +26,6 @@ public class AnalyticsController {
 
     @GetMapping("/messages")
     @Operation(summary = "Get message volume statistics")
-    // @PreAuthorize("hasRole('ADMIN')") // Uncomment when roles are strictly
-    // enforced
     public ResponseEntity<Map<String, Object>> getMessageStats(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime since) {
         if (since == null) {
@@ -46,8 +44,7 @@ public class AnalyticsController {
     @GetMapping("/overview")
     @Operation(summary = "Get general system overview")
     public ResponseEntity<Map<String, Object>> getOverview() {
-        // Reuse existing methods to aggregate an overview
         Map<String, Object> overview = analyticsService.getUserGrowthStats(LocalDateTime.now().minusDays(30));
-        return ResponseEntity.ok(overview); // Can be expanded
+        return ResponseEntity.ok(overview);
     }
 }

@@ -33,6 +33,9 @@ class GroupServiceTest {
     @Mock
     private SimpMessagingTemplate messagingTemplate;
 
+    @Mock
+    private iuh.fit.se.minizalobackend.repository.GroupEventRepository groupEventRepository;
+
     @InjectMocks
     private GroupServiceImpl groupService;
 
@@ -69,5 +72,23 @@ class GroupServiceTest {
         verify(messagingTemplate, times(1)).convertAndSend(
                 eq("/topic/group/" + groupId + "/read-receipts"),
                 any(ReadReceiptResponse.class));
+    }
+
+    @Test
+    void getGroupEvents_Success() {
+        when(roomMemberRepository.existsByRoom_IdAndUser_Id(groupId, testUser.getId())).thenReturn(true);
+        GroupEvent event = new GroupEvent();
+        event.setId(UUID.randomUUID());
+        event.setGroup(testRoom);
+        event.setUser(testUser);
+
+        when(groupEventRepository.findByGroupIdOrderByCreatedAtDesc(groupId))
+                .thenReturn(java.util.Collections.singletonList(event));
+
+        var events = groupService.getGroupEvents(groupId, testUser);
+
+        org.junit.jupiter.api.Assertions.assertFalse(events.isEmpty());
+        org.junit.jupiter.api.Assertions.assertEquals(1, events.size());
+        verify(groupEventRepository).findByGroupIdOrderByCreatedAtDesc(groupId);
     }
 }

@@ -13,5 +13,5 @@ public class MuteConversationRequest {
     @NotNull(message = "Mute status is required")
     private boolean mute;
 
-    private Long durationMinutes; // null or 0 for indefinitely
+    private Long durationMinutes;
 }

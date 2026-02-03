@@ -46,7 +46,6 @@ public class ChatController {
         String senderId = getUserIdFromPrincipal(principal);
         String destination = "/topic/typing/" + request.getRoomId();
 
-        // Broadcast typing status to the room
         messagingTemplate.convertAndSend(destination, Map.of(
                 "userId", senderId,
                 "isTyping", request.isTyping()));
@@ -66,7 +65,6 @@ public class ChatController {
 
     @MessageMapping("/chat.pin")
     public void handlePinMessage(@Payload @Valid PinMessageRequest request, Principal principal) {
-        // Only allow admins to pin in groups? For now, allow everyone or check role
         messageService.pinMessage(request.getRoomId(), request.getMessageId(), request.isPin());
     }
 
@@ -86,7 +84,6 @@ public class ChatController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Principal principal) {
-        // This endpoint is deprecated in favor of /api/chat/history/{roomId}
         return ResponseEntity.ok(List.of());
     }
 

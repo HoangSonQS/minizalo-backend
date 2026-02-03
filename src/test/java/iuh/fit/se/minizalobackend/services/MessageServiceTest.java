@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.services;
 
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
+import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
@@ -57,12 +58,10 @@ class MessageServiceTest {
         message.setSenderId(UUID.randomUUID().toString());
         message.setSenderName("Test User");
         message.setContent("Hello World");
-        // CreatedAt is set in the service
     }
 
     @Test
     void saveMessage_Success() {
-        // Mock group lookup to avoid NPE in triggerNotifications
         lenient().when(groupRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
 
         MessageDynamo savedMessage = messageService.saveMessage(message);
@@ -91,6 +90,27 @@ class MessageServiceTest {
         assertEquals("Hello from Dynamo", actualResult.getMessages().get(0).getContent());
         assertEquals("nextKey", actualResult.getLastEvaluatedKey());
         verify(messageDynamoRepository, times(1)).getMessagesByRoomId(roomId.toString(), lastKey, limit);
+    }
+
+    @Test
+    void searchMessages_Success() {
+        UUID roomId = UUID.randomUUID();
+        String query = "Hello";
+        String lastKey = "lastKey";
+        int limit = 10;
+
+        SearchMessageResponse mockResponse = new SearchMessageResponse(Collections.singletonList(message), "newLastKey",
+                true, 1);
+
+        when(messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey))
+                .thenReturn(mockResponse);
+
+        SearchMessageResponse result = messageService.searchMessages(roomId, query, limit, lastKey);
+
+        assertNotNull(result);
+        assertEquals(1, result.getMessages().size());
+        assertEquals("newLastKey", result.getLastKey());
+        verify(messageDynamoRepository).searchMessages(roomId.toString(), query, limit, lastKey);
     }
 
     /*
