@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.services.impl;
 
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
+import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
 import iuh.fit.se.minizalobackend.models.MessageReaction;
@@ -267,5 +268,10 @@ public class MessageServiceImpl implements MessageService {
         if (lowerMime.startsWith("video"))
             return AppConstants.MESSAGE_TYPE_VIDEO;
         return AppConstants.MESSAGE_TYPE_DOCUMENT;
+    }
+
+    @Override
+    public SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey) {
+        return messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey);
     }
 }

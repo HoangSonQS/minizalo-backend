@@ -119,4 +119,13 @@ public class ChatController {
         messageService.recallMessage(recallMessageRequest.getRoomId(), recallMessageRequest.getMessageId());
     }
 
+    @GetMapping("/api/chat/{roomId}/search")
+    public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse> searchMessages(
+            @PathVariable UUID roomId,
+            @RequestParam String q,
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) String lastKey) {
+        log.info("Searching messages in room: {}, query: {}", roomId, q);
+        return ResponseEntity.ok(messageService.searchMessages(roomId, q, limit, lastKey));
+    }
 }
