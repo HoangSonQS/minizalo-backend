@@ -101,6 +101,13 @@ public class UserController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/heartbeat")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> heartbeat(@AuthenticationPrincipal UserDetailsImpl userDetails) {
+        userPresenceService.heartbeat(userDetails.getId());
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/status")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
     public ResponseEntity<Map<UUID, Boolean>> getUsersStatus(@RequestBody List<UUID> userIds) {
