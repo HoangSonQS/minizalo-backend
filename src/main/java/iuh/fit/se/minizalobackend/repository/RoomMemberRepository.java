@@ -26,5 +26,7 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, UUID> {
 
     Optional<RoomMember> findByRoomAndUserAndRole(ChatRoom room, User user, ERoomRole role);
 
-    List<RoomMember> findByUserAndRoom_Type(User user, ERoomType roomType); // Add this method
+    List<RoomMember> findByUserAndRoom_Type(User user, ERoomType roomType);
+
+    boolean existsByRoom_IdAndUser_Id(UUID roomId, UUID userId);
 }

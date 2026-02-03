@@ -31,4 +31,6 @@ public interface UserService {
     void updateFcmToken(UUID userId, String token);
 
     void changePassword(UUID userId, ChangePasswordRequest request);
+
+    void muteConversation(UUID userId, iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request);
 }

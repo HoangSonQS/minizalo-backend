@@ -110,4 +110,13 @@ public class UserController {
                         userPresenceService::isUserOnline));
         return ResponseEntity.ok(statusMap);
     }
+
+    @PostMapping("/mute")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> muteConversation(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request) {
+        userService.muteConversation(userDetails.getId(), request);
+        return ResponseEntity.ok().build();
+    }
 }
