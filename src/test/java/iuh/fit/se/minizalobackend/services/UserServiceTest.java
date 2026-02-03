@@ -125,6 +125,29 @@ class UserServiceTest {
     }
 
     @Test
+    void changePassword_Success() {
+        java.util.UUID userId = java.util.UUID.randomUUID();
+        iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest request = new iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest();
+        request.setOldPassword("oldPassword");
+        request.setNewPassword("newPassword");
+        request.setConfirmPassword("newPassword");
+
+        iuh.fit.se.minizalobackend.models.User user = new iuh.fit.se.minizalobackend.models.User();
+        user.setId(userId);
+        user.setPassword("encodedOldPassword");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("oldPassword", "encodedOldPassword")).thenReturn(true);
+        when(passwordEncoder.matches("newPassword", "encodedOldPassword")).thenReturn(false);
+        when(passwordEncoder.encode("newPassword")).thenReturn("encodedNewPassword");
+
+        userServiceImpl.changePassword(userId, request);
+
+        verify(userRepository).save(user);
+        assertEquals("encodedNewPassword", user.getPassword());
+    }
+
+    @Test
     void muteConversation_Success() {
         java.util.UUID userId = java.util.UUID.randomUUID();
         java.util.UUID roomId = java.util.UUID.randomUUID();
