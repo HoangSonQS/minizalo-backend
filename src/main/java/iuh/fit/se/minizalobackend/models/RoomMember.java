@@ -36,4 +36,11 @@ public class RoomMember {
 
     @Column(name = "last_read_at")
     private LocalDateTime lastReadAt;
+
+    @Column(name = "is_muted", nullable = false)
+    @Builder.Default
+    private boolean isMuted = false;
+
+    @Column(name = "mute_until")
+    private LocalDateTime muteUntil;
 }

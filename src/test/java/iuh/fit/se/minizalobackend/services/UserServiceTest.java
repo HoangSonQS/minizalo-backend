@@ -31,6 +31,10 @@ class UserServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private MinioService minioService;
+    @Mock
+    private iuh.fit.se.minizalobackend.repository.GroupRepository groupRepository;
+    @Mock
+    private iuh.fit.se.minizalobackend.repository.RoomMemberRepository roomMemberRepository;
 
     @InjectMocks
     private UserServiceImpl userServiceImpl;
@@ -116,6 +120,61 @@ class UserServiceTest {
         verify(userRepository, times(1)).existsByEmail("test@example.com");
         verify(passwordEncoder, times(1)).encode(anyString());
         verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
+        verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void changePassword_Success() {
+        java.util.UUID userId = java.util.UUID.randomUUID();
+        iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest request = new iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest();
+        request.setOldPassword("oldPassword");
+        request.setNewPassword("newPassword");
+        request.setConfirmPassword("newPassword");
+
+        iuh.fit.se.minizalobackend.models.User user = new iuh.fit.se.minizalobackend.models.User();
+        user.setId(userId);
+        user.setPassword("encodedOldPassword");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("oldPassword", "encodedOldPassword")).thenReturn(true);
+        when(passwordEncoder.matches("newPassword", "encodedOldPassword")).thenReturn(false);
+        when(passwordEncoder.encode("newPassword")).thenReturn("encodedNewPassword");
+
+        userServiceImpl.changePassword(userId, request);
+
+        verify(userRepository).save(user);
+        assertEquals("encodedNewPassword", user.getPassword());
+    }
+
+    @Test
+    void muteConversation_Success() {
+        java.util.UUID userId = java.util.UUID.randomUUID();
+        java.util.UUID roomId = java.util.UUID.randomUUID();
+        iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request = new iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest();
+        request.setRoomId(roomId);
+        request.setMute(true);
+        request.setDurationMinutes(60L);
+
+        iuh.fit.se.minizalobackend.models.ChatRoom room = new iuh.fit.se.minizalobackend.models.ChatRoom();
+        room.setId(roomId);
+
+        iuh.fit.se.minizalobackend.models.User user = new iuh.fit.se.minizalobackend.models.User();
+        user.setId(userId);
+
+        iuh.fit.se.minizalobackend.models.RoomMember member = iuh.fit.se.minizalobackend.models.RoomMember.builder()
+                .room(room)
+                .user(user)
+                .build();
+
+        when(groupRepository.findById(roomId)).thenReturn(java.util.Optional.of(room));
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+        when(roomMemberRepository.findByRoomAndUser(room, user)).thenReturn(java.util.Optional.of(member));
+
+        userServiceImpl.muteConversation(userId, request);
+
+        org.junit.jupiter.api.Assertions.assertTrue(member.isMuted());
+        org.junit.jupiter.api.Assertions.assertNotNull(member.getMuteUntil());
+        verify(roomMemberRepository).save(member);
     }
 }

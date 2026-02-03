@@ -47,4 +47,26 @@ class UserPresenceServiceTest {
     void isUserOnline_ForNewUser_ShouldReturnFalse() {
         assertFalse(userPresenceService.isUserOnline(UUID.randomUUID()));
     }
+
+    @Test
+    void heartbeat_ShouldMarkUserOnline() {
+        // Mock findById to avoid NPE in ifPresent
+        iuh.fit.se.minizalobackend.models.User user = new iuh.fit.se.minizalobackend.models.User();
+        user.setId(userId);
+        org.mockito.Mockito.when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+
+        userPresenceService.heartbeat(userId);
+        assertTrue(userPresenceService.isUserOnline(userId));
+        // Verify save is called (it might be called inside ifPresent)
+        org.mockito.Mockito.verify(userRepository).save(user);
+    }
+
+    @Test
+    void init_ShouldResetStatus() {
+        // userPresenceService is verified as implementation
+        if (userPresenceService instanceof UserPresenceServiceImpl) {
+            ((UserPresenceServiceImpl) userPresenceService).init();
+            org.mockito.Mockito.verify(userRepository).updateAllUsersOffline();
+        }
+    }
 }

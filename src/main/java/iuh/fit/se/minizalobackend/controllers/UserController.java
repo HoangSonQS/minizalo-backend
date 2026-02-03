@@ -26,7 +26,6 @@ public class UserController {
     private final UserService userService;
     private final UserPresenceService userPresenceService;
 
-    // Constants for file validation
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final List<String> ALLOWED_MIME_TYPES = Arrays.asList("image/jpeg", "image/png", "image/gif");
 
@@ -101,6 +100,13 @@ public class UserController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/heartbeat")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> heartbeat(@AuthenticationPrincipal UserDetailsImpl userDetails) {
+        userPresenceService.heartbeat(userDetails.getId());
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/status")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
     public ResponseEntity<Map<UUID, Boolean>> getUsersStatus(@RequestBody List<UUID> userIds) {
@@ -109,5 +115,14 @@ public class UserController {
                         id -> id,
                         userPresenceService::isUserOnline));
         return ResponseEntity.ok(statusMap);
+    }
+
+    @PostMapping("/mute")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> muteConversation(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request) {
+        userService.muteConversation(userDetails.getId(), request);
+        return ResponseEntity.ok().build();
     }
 }

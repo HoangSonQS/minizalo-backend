@@ -13,10 +13,12 @@ import iuh.fit.se.minizalobackend.models.ChatRoom;
 import iuh.fit.se.minizalobackend.models.ERoomEventType;
 import iuh.fit.se.minizalobackend.models.ERoomRole;
 import iuh.fit.se.minizalobackend.models.ERoomType;
+import iuh.fit.se.minizalobackend.models.GroupEvent;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
+import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
@@ -24,6 +26,7 @@ import iuh.fit.se.minizalobackend.services.GroupService;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -40,11 +43,13 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GroupServiceImpl implements GroupService {
 
     private final GroupRepository groupRepository;
     private final UserRepository userRepository;
     private final RoomMemberRepository roomMemberRepository;
+    private final GroupEventRepository groupEventRepository;
     private final MessageService messageService;
     private final ModelMapper modelMapper;
     private final SimpMessagingTemplate messagingTemplate;
@@ -339,6 +344,28 @@ public class GroupServiceImpl implements GroupService {
 
         String destination = "/topic/group/" + groupId.toString() + "/read-receipts";
         messagingTemplate.convertAndSend(destination, readReceipt);
+    }
+
+    @Override
+    public List<iuh.fit.se.minizalobackend.dtos.response.GroupEventResponse> getGroupEvents(UUID groupId, User viewer) {
+        // Validate user is member
+        if (!roomMemberRepository.existsByRoom_IdAndUser_Id(groupId, viewer.getId())) {
+            throw new IllegalArgumentException("You are not a member of this group");
+        }
+
+        List<GroupEvent> events = groupEventRepository.findByGroupIdOrderByCreatedAtDesc(groupId);
+
+        return events.stream().map(event -> iuh.fit.se.minizalobackend.dtos.response.GroupEventResponse.builder()
+                .id(event.getId())
+                .groupId(event.getGroup().getId())
+                .userId(event.getUser() != null ? event.getUser().getId() : null)
+                .userName(event.getUser() != null ? event.getUser().getDisplayName() : "System")
+                .userAvatar(event.getUser() != null ? event.getUser().getAvatarUrl() : null)
+                .eventType(event.getEventType())
+                .metadata(event.getMetadata())
+                .createdAt(event.getCreatedAt())
+                .build())
+                .collect(Collectors.toList());
     }
 
     private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers) {

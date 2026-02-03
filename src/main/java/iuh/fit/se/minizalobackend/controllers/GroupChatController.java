@@ -138,4 +138,14 @@ public class GroupChatController {
                 groupService.markAsRead(request.getGroupId(), currentUser);
                 return ResponseEntity.ok().build();
         }
+
+        @GetMapping("/{groupId}/events")
+        public ResponseEntity<List<iuh.fit.se.minizalobackend.dtos.response.GroupEventResponse>> getGroupEvents(
+                        @PathVariable UUID groupId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                return ResponseEntity.ok(groupService.getGroupEvents(groupId, currentUser));
+        }
 }

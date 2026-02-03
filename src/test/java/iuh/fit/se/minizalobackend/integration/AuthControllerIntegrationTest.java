@@ -24,6 +24,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.Map;
 
+import org.springframework.transaction.annotation.Transactional; // Added
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
@@ -34,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Transactional // Added
 public class AuthControllerIntegrationTest {
 
         @Autowired
@@ -53,7 +56,7 @@ public class AuthControllerIntegrationTest {
         @BeforeEach
         void setUp() throws Exception {
                 // Clear database before each test
-                userRepository.deleteAll();
+                // userRepository.deleteAll(); // Handled by @Transactional
 
                 // Mock MinioClient behavior
                 when(minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
@@ -150,5 +153,46 @@ public class AuthControllerIntegrationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(loginRequest)))
                                 .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void testChangePassword() throws Exception {
+                // 1. Register and Login
+                SignupRequest signupRequest = new SignupRequest("ChangePassword User", "0999999999", "cp@example.com",
+                                "Password@123");
+                mockMvc.perform(post(AUTH_API + "/signup")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(signupRequest)))
+                                .andExpect(status().isOk());
+
+                LoginRequest loginRequest = new LoginRequest("0999999999", "Password@123");
+                MvcResult loginResult = mockMvc.perform(post(AUTH_API + "/signin")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(loginRequest)))
+                                .andExpect(status().isOk())
+                                .andReturn();
+
+                JwtResponse jwtResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(),
+                                JwtResponse.class);
+                String accessToken = jwtResponse.getAccessToken();
+
+                // 2. Change Password
+                iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest changePasswordRequest = new iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest();
+                changePasswordRequest.setOldPassword("Password@123");
+                changePasswordRequest.setNewPassword("NewPassword@123");
+                changePasswordRequest.setConfirmPassword("NewPassword@123");
+
+                mockMvc.perform(post(AUTH_API + "/change-password")
+                                .header("Authorization", "Bearer " + accessToken)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(changePasswordRequest)))
+                                .andExpect(status().isOk());
+
+                // 3. Login with new password
+                LoginRequest newLoginRequest = new LoginRequest("0999999999", "NewPassword@123");
+                mockMvc.perform(post(AUTH_API + "/signin")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(newLoginRequest)))
+                                .andExpect(status().isOk());
         }
 }
