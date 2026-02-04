@@ -35,108 +35,113 @@ import static org.junit.jupiter.api.Assertions.*;
 @Transactional // Added
 public class UserIntegrationTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+        @Autowired
+        private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+        @Autowired
+        private ObjectMapper objectMapper;
 
-    @Autowired
-    private UserRepository userRepository;
+        @Autowired
+        private UserRepository userRepository;
 
-    @Autowired
-    private GroupRepository groupRepository;
+        @Autowired
+        private GroupRepository groupRepository;
 
-    @Autowired
-    private RoomMemberRepository roomMemberRepository;
+        @Autowired
+        private RoomMemberRepository roomMemberRepository;
 
-    @PersistenceContext
-    private EntityManager entityManager;
+        @PersistenceContext
+        private EntityManager entityManager;
 
-    @MockBean
-    private SimpMessagingTemplate messagingTemplate;
+        @MockBean
+        private SimpMessagingTemplate messagingTemplate;
 
-    // Mock Minio to avoid bean creation error if Minio is required
-    @MockBean
-    private io.minio.MinioClient minioClient;
+        // Mock Minio to avoid bean creation error if Minio is required
+        @MockBean
+        private io.minio.MinioClient minioClient;
 
-    private String accessToken;
-    private User testUser;
-    private ChatRoom testRoom;
+        private String accessToken;
+        private User testUser;
+        private ChatRoom testRoom;
 
-    @BeforeEach
-    void setUp() throws Exception {
-        // roomMemberRepository.deleteAll(); // Handled by @Transactional
-        // groupRepository.deleteAll();
-        // userRepository.deleteAll();
+        @BeforeEach
+        void setUp() throws Exception {
+                // roomMemberRepository.deleteAll(); // Handled by @Transactional
+                // groupRepository.deleteAll();
+                // userRepository.deleteAll();
 
-        // Register and Login
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "Password@123");
-        mockMvc.perform(post("/api/auth/signup")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(signupRequest)))
-                .andExpect(status().isOk());
+                // Register and Login with unique data to avoid conflicts in CI/CD
+                // Ensure phone is always 10 digits (validation requires 10-11 digits)
+                long timestamp = System.currentTimeMillis() % 1000000; // 6 digits max
+                String uniquePhone = String.format("0987%06d", timestamp); // Always 10 digits: 0987 + 6 digits
+                String uniqueEmail = "test" + timestamp + "@example.com";
 
-        testUser = userRepository.findByUsername("0987654321").orElseThrow();
+                SignupRequest signupRequest = new SignupRequest("Test User", uniquePhone, uniqueEmail, "Password@123");
+                mockMvc.perform(post("/api/auth/signup")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(signupRequest)))
+                                .andExpect(status().isOk());
 
-        LoginRequest loginRequest = new LoginRequest("0987654321", "Password@123");
-        MvcResult loginResult = mockMvc.perform(post("/api/auth/signin")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(loginRequest)))
-                .andExpect(status().isOk())
-                .andReturn();
+                testUser = userRepository.findByUsername(uniquePhone).orElseThrow();
 
-        JwtResponse jwtResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(),
-                JwtResponse.class);
-        accessToken = jwtResponse.getAccessToken();
+                LoginRequest loginRequest = new LoginRequest(uniquePhone, "Password@123");
+                MvcResult loginResult = mockMvc.perform(post("/api/auth/signin")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(loginRequest)))
+                                .andExpect(status().isOk())
+                                .andReturn();
 
-        // Create a Chat Room
-        testRoom = new ChatRoom();
-        testRoom.setName("Test Group");
-        testRoom.setType(ERoomType.GROUP);
-        testRoom.setCreatedBy(testUser);
-        testRoom = groupRepository.save(testRoom);
+                JwtResponse jwtResponse = objectMapper.readValue(loginResult.getResponse().getContentAsString(),
+                                JwtResponse.class);
+                accessToken = jwtResponse.getAccessToken();
 
-        // Add user to room
-        RoomMember member = RoomMember.builder()
-                .room(testRoom)
-                .user(testUser)
-                .role(ERoomRole.MEMBER)
-                .build();
-        roomMemberRepository.save(member);
+                // Create a Chat Room
+                testRoom = new ChatRoom();
+                testRoom.setName("Test Group");
+                testRoom.setType(ERoomType.GROUP);
+                testRoom.setCreatedBy(testUser);
+                testRoom = groupRepository.save(testRoom);
 
-        // Flush to ensure entities are persisted
-        entityManager.flush();
-        entityManager.clear();
-    }
+                // Add user to room
+                RoomMember member = RoomMember.builder()
+                                .room(testRoom)
+                                .user(testUser)
+                                .role(ERoomRole.MEMBER)
+                                .build();
+                roomMemberRepository.save(member);
 
-    @Test
-    void testMuteConversation() throws Exception {
-        MuteConversationRequest request = new MuteConversationRequest();
-        request.setRoomId(testRoom.getId());
-        request.setMute(true);
-        request.setDurationMinutes(60L);
+                // Flush to ensure entities are persisted
+                entityManager.flush();
+                entityManager.clear();
+        }
 
-        mockMvc.perform(post("/api/users/mute")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk());
+        @Test
+        void testMuteConversation() throws Exception {
+                MuteConversationRequest request = new MuteConversationRequest();
+                request.setRoomId(testRoom.getId());
+                request.setMute(true);
+                request.setDurationMinutes(60L);
 
-        // Verify DB
-        RoomMember updatedMember = roomMemberRepository.findByRoomAndUser(testRoom, testUser).orElseThrow();
-        assertTrue(updatedMember.isMuted());
-        assertNotNull(updatedMember.getMuteUntil());
-    }
+                mockMvc.perform(post("/api/users/mute")
+                                .header("Authorization", "Bearer " + accessToken)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isOk());
 
-    @Test
-    void testHeartbeat() throws Exception {
-        mockMvc.perform(post("/api/users/heartbeat")
-                .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk());
+                // Verify DB
+                RoomMember updatedMember = roomMemberRepository.findByRoomAndUser(testRoom, testUser).orElseThrow();
+                assertTrue(updatedMember.isMuted());
+                assertNotNull(updatedMember.getMuteUntil());
+        }
 
-        // Verify User status
-        User updatedUser = userRepository.findById(testUser.getId()).orElseThrow();
-        assertTrue(updatedUser.getIsOnline());
-    }
+        @Test
+        void testHeartbeat() throws Exception {
+                mockMvc.perform(post("/api/users/heartbeat")
+                                .header("Authorization", "Bearer " + accessToken))
+                                .andExpect(status().isOk());
+
+                // Verify User status
+                User updatedUser = userRepository.findById(testUser.getId()).orElseThrow();
+                assertTrue(updatedUser.getIsOnline());
+        }
 }
