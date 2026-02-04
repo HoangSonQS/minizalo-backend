@@ -71,8 +71,10 @@ public class UserIntegrationTest {
                 // userRepository.deleteAll();
 
                 // Register and Login with unique data to avoid conflicts in CI/CD
-                String uniquePhone = "098765" + System.currentTimeMillis() % 10000;
-                String uniqueEmail = "test" + System.currentTimeMillis() % 10000 + "@example.com";
+                // Ensure phone is always 10 digits (validation requires 10-11 digits)
+                long timestamp = System.currentTimeMillis() % 1000000; // 6 digits max
+                String uniquePhone = String.format("0987%06d", timestamp); // Always 10 digits: 0987 + 6 digits
+                String uniqueEmail = "test" + timestamp + "@example.com";
 
                 SignupRequest signupRequest = new SignupRequest("Test User", uniquePhone, uniqueEmail, "Password@123");
                 mockMvc.perform(post("/api/auth/signup")
