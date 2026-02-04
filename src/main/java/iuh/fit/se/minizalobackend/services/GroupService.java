@@ -28,4 +28,6 @@ public interface GroupService {
     MessageResponse leaveGroup(UUID groupId, User user);
 
     void markAsRead(UUID groupId, User user);
+
+    List<iuh.fit.se.minizalobackend.dtos.response.GroupEventResponse> getGroupEvents(UUID groupId, User viewer);
 }

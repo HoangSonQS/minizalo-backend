@@ -70,7 +70,6 @@ class NotificationServiceTest {
             notificationService.sendNotification(userId, fcmToken, "Title", "Body");
 
             verify(userRepository, times(1)).save(testUser);
-            // Verify token is cleared (null)
             assert testUser.getFcmToken() == null;
         }
     }

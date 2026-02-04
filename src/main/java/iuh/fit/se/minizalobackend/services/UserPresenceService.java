@@ -8,4 +8,6 @@ public interface UserPresenceService {
     void markUserOffline(UUID userId);
 
     boolean isUserOnline(UUID userId);
+
+    void heartbeat(UUID userId);
 }

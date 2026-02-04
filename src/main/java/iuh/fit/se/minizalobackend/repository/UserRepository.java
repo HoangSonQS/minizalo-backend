@@ -10,7 +10,14 @@ import java.util.UUID;
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByUsernameContainingIgnoreCase(String username);
+
     Optional<User> findByUsername(String username);
+
     Boolean existsByUsername(String username);
+
     Boolean existsByEmail(String email);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE User u SET u.isOnline = false")
+    void updateAllUsersOffline();
 }

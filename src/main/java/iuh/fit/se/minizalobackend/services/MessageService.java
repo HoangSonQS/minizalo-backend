@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.services;
 
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
+import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
 import java.util.UUID;
@@ -21,4 +22,6 @@ public interface MessageService {
     MessageDynamo forwardMessage(String originalRoomId, String originalMessageId, String targetRoomId, String senderId);
 
     MessageDynamo processMessage(ChatMessageRequest request, String senderId);
+
+    SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey);
 }

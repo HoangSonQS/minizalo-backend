@@ -1,11 +1,13 @@
 package iuh.fit.se.minizalobackend.repository.impl;
 
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
+import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
+import software.amazon.awssdk.enhanced.dynamodb.Expression;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.Page;
@@ -72,6 +74,41 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
         return pagedResult.items().stream()
                 .filter(m -> messageId.equals(m.getMessageId()))
                 .findFirst();
+    }
+
+    @Override
+    public SearchMessageResponse searchMessages(String chatRoomId, String query, int limit, String lastEvaluatedKey) {
+        QueryConditional queryConditional = QueryConditional
+                .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
+
+        Expression filterExpression = Expression.builder()
+                .expression("contains(content, :query)")
+                .putExpressionValue(":query", AttributeValue.builder().s(query).build())
+                .build();
+
+        QueryEnhancedRequest.Builder requestBuilder = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .filterExpression(filterExpression)
+                .limit(limit)
+                .scanIndexForward(false);
+
+        if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
+            Map<String, AttributeValue> startKey = deserializeExclusiveStartKey(lastEvaluatedKey);
+            requestBuilder.exclusiveStartKey(startKey);
+        }
+
+        var pagedResult = messageTable.query(requestBuilder.build());
+        Optional<Page<MessageDynamo>> firstPage = pagedResult.stream().findFirst();
+
+        if (firstPage.isPresent()) {
+            Page<MessageDynamo> page = firstPage.get();
+            List<MessageDynamo> messages = page.items();
+            String newLastEvaluatedKey = serializeExclusiveStartKey(page.lastEvaluatedKey());
+            return new SearchMessageResponse(messages, newLastEvaluatedKey, newLastEvaluatedKey != null,
+                    messages.size());
+        } else {
+            return new SearchMessageResponse(Collections.emptyList(), null, false, 0);
+        }
     }
 
     private String serializeExclusiveStartKey(Map<String, AttributeValue> key) {

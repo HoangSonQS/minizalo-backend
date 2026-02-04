@@ -29,17 +29,14 @@ public class FileController {
         String contentType = file.getContentType();
         long size = file.getSize();
 
-        // Simple validation (can be enhanced)
         if (file.isEmpty()) {
             throw new IllegalArgumentException("File cannot be empty");
         }
-
-        // Folder structure: files/
         String fileUrl = minioService.uploadFile(file, "files/", fileName);
 
         FileUploadResponse response = FileUploadResponse.builder()
                 .fileName(fileName)
-                .fileUrl(fileUrl) // returns the object path in MinIO
+                .fileUrl(fileUrl)
                 .fileType(contentType)
                 .size(size)
                 .build();
