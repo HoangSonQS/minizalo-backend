@@ -34,9 +34,21 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RefreshToken createRefreshToken(String userId) {
+        UUID userUUID = UUID.fromString(userId);
+        
+        // Delete existing refresh token for this user before creating new one
+        userRepository.findById(userUUID).ifPresent(user -> {
+            if (user.getRefreshToken() != null) {
+                refreshTokenRepository.delete(user.getRefreshToken());
+                user.setRefreshToken(null);
+                userRepository.save(user);
+                refreshTokenRepository.flush();
+            }
+        });
+        
         RefreshToken refreshToken = new RefreshToken();
 
-        refreshToken.setUser(userRepository.findById(UUID.fromString(userId))
+        refreshToken.setUser(userRepository.findById(userUUID)
                 .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId)));
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));
         refreshToken.setToken(UUID.randomUUID().toString());
