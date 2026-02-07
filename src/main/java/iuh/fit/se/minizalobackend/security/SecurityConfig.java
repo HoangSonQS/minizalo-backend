@@ -69,7 +69,8 @@ public class SecurityConfig {
                 "http://localhost:8081",
                 "http://10.0.2.2:8081",
                 "http://localhost:19000",
-                "http://localhost:19006"));
+                "http://localhost:19006",
+                "http://192.168.1.10:8081"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Allow all headers
         configuration.setAllowCredentials(true);
