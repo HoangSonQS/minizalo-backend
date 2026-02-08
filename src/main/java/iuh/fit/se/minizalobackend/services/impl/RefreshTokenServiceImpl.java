@@ -35,28 +35,19 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Transactional
     public RefreshToken createRefreshToken(String userId) {
 
-        UUID userUUID = UUID.fromString(userId);
-        
-        // Delete existing refresh token for this user before creating new one
-        userRepository.findById(userUUID).ifPresent(user -> {
-            if (user.getRefreshToken() != null) {
-                refreshTokenRepository.delete(user.getRefreshToken());
-                user.setRefreshToken(null);
-                userRepository.save(user);
-                refreshTokenRepository.flush();
-            }
-        });
-        
+        var user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId));
 
-        // Delete existing refresh token for this user to avoid duplicate key violation
-        userRepository.findById(UUID.fromString(userId)).ifPresent(user -> {
-            refreshTokenRepository.deleteByUser(user);
-            refreshTokenRepository.flush();
-        });
+        // Bỏ tham chiếu refresh token cũ trên User (tránh xung đột quan hệ OneToOne)
+        user.setRefreshToken(null);
+        userRepository.saveAndFlush(user);
+
+        // Xóa refresh token cũ theo user_id (native query) để chắc chắn không còn bản ghi trước khi INSERT
+        refreshTokenRepository.deleteByUserId(user.getId());
+        refreshTokenRepository.flush();
 
         RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUser(userRepository.findById(userUUID)
-                .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId)));
+        refreshToken.setUser(user);
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));
         refreshToken.setToken(UUID.randomUUID().toString());
 
