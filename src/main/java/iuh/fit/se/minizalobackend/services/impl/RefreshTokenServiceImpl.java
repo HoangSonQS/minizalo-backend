@@ -34,6 +34,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RefreshToken createRefreshToken(String userId) {
+
         UUID userUUID = UUID.fromString(userId);
         
         // Delete existing refresh token for this user before creating new one
@@ -46,7 +47,13 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             }
         });
         
-        RefreshToken refreshToken = new RefreshToken();
+
+        // Delete existing refresh token for this user to avoid duplicate key violation
+        userRepository.findById(UUID.fromString(userId)).ifPresent(user -> {
+            refreshTokenRepository.deleteByUser(user);
+            refreshTokenRepository.flush();
+        });
+
 
         refreshToken.setUser(userRepository.findById(userUUID)
                 .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId)));
