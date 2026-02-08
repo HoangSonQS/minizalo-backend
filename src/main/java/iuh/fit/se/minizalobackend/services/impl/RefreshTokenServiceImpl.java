@@ -54,7 +54,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             refreshTokenRepository.flush();
         });
 
-
+        RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(userRepository.findById(userUUID)
                 .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId)));
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));

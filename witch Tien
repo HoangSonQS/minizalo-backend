@@ -1,0 +1,58 @@
+[33m164e888[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Done task Tuan 3: DangNhap + DangKy Mobile
+[33m0bfa4a1[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge pull request #11 from HoangSonQS/feature/complete-backend-features
+[33m7f6b3cc[m[33m ([m[1;31morigin/feature/complete-backend-features[m[33m)[m fix(test): ensure phone number always has 10 digits in UserIntegrationTest
+[33m3d4371e[m fix(test): use unique test data in UserIntegrationTest to avoid CI/CD conflicts
+[33mc925822[m fix
+[33ma0dd233[m Merge pull request #10 from HoangSonQS/feature/complete-backend-features
+[33m1ff0cf1[m test: add comprehensive unit and integration tests for new features
+[33m64f1d3e[m test: add unit tests for search, group events, mute, and user presence
+[33m3d2c752[m feat(user): enhance user presence with heartbeat and offline reset
+[33m73dff66[m feat(notification): implement mute conversation functionality
+[33mddff979[m feat(chat): implement search messages functionality
+[33mafe1664[m feat(auth): implement change password functionality
+[33m3459a6c[m Merge pull request #9 from HoangSonQS/main
+[33m72e9e9b[m chore: move AuthControllerIntegrationTest to integration package and cleanup resources
+[33mb779512[m[33m ([m[1;33mtag: [m[1;33mv1.0.0[m[33m)[m Merge pull request #8 from HoangSonQS/develop
+[33m9616a03[m Merge pull request #7 from HoangSonQS/feature/infrastructure-hardening
+[33m9025c77[m chore(polish): refactor services, add AppConstants, and overhaul README for final delivery
+[33mb869558[m feat(infra): harden docker-compose, sync CI with redis, and add full-flow integration test
+[33m098e774[m feat(analytics): implement analytics service and reporting apis
+[33mf819172[m Merge pull request #6 from HoangSonQS/feature/media-core
+[33m0497b3a[m feat(media): complete media processing logic, file limits, and full test coverage
+[33m4645c91[m feat(media): implement file upload api, minio integration and message attachments support
+[33m660f6f7[m Merge pull request #5 from HoangSonQS/fix/test-environment
+[33m75373c9[m Fix: Configure H2 for tests and mock MinIO client
+[33mc2041cf[m Merge pull request #4 from HoangSonQS/develop
+[33m16153b0[m Merge pull request #3 from HoangSonQS/feature/messaging-core
+[33m7266b91[m docs: update README with architecture details and setup guide
+[33m7dd4d8c[m Merge pull request #2 from HoangSonQS/develop
+[33m3706b2f[m Merge pull request #1 from HoangSonQS/feature/messaging-core
+[33m158bd62[m fix(backend): resolve swagger ui 500 error & update user controller tests
+[33m7ad3ca1[m fix(test): use /ws/websocket path for raw client connection
+[33m76c293e[m fix(ci): permit /ws handshake and add auth to WebSocketIntegrationTest
+[33m50ab3b0[m fix(ci): add all required environment variables to handle ignored test properties
+[33mac6d9e7[m fix(ci): run minio as a background step to fix manifest error
+[33m12da3f1[m fix(ci): fix yaml syntax error in services
+[33m0d1caaf[m fix(ci): fix test NPE and add missing services for integration tests
+[33m5447841[m ci: complete backend ci/cd with postgres and firebase dummy
+[33maba3a30[m feat(auth): implement phone-based registration and strict validation
+[33m12ded46[m feat(messaging): implement message reply and forward functionalities
+[33mc6814e9[m test(auth): update integration tests for phone-based registration
+[33m19ab2e8[m chore(docker): enable hot reload with docker compose watch
+[33m1a07521[m feat(auth): implement phone-based registration and strict validation
+[33m2780823[m chore(infra): setup structured logging and integration tests
+[33m7dec9a1[m feat(analytics): implement activity logging and stats APIs
+[33m1cf4ef4[m feat(message): add reactions, recall and pin functions
+[33md14fb46[m feat(chat): implement typing indicators and read receipts
+[33m22d6113[m feat(presence): persist user status to database
+[33me84e3d0[m feat(messaging): implement presence, push notifications, and read receipts
+[33m0688b95[m ref(MessageDynamoRepository): make implement for repo
+[33m46a4a8b[m chore: update gitignore rules
+[33m1824246[m (feat): Implement Group Messaging and refactor storage to DynamoDB
+[33m56556f3[m feat(core): implement robust realtime messaging system (auth, persistence, history)
+[33me95ba3c[m fix(security): resolve deprecated security config and schema validation
+[33m9033e76[m feat(chat): implement week 2 messaging core and tests
+[33m55f48b5[m refactor(security): harden application security configuration
+[33m48e9e8b[m feat: Centralized error handling, lazy load roles, and comprehensive unit tests
+[33m18da619[m chore: initial backend setup with docker and spring boot
+[33m754c4cf[m chore: initial backend setup with docker and spring boot
