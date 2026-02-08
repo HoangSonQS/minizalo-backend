@@ -34,10 +34,20 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RefreshToken createRefreshToken(String userId) {
-        RefreshToken refreshToken = new RefreshToken();
 
-        refreshToken.setUser(userRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId)));
+        var user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId));
+
+        // Bỏ tham chiếu refresh token cũ trên User (tránh xung đột quan hệ OneToOne)
+        user.setRefreshToken(null);
+        userRepository.saveAndFlush(user);
+
+        // Xóa refresh token cũ theo user_id (native query) để chắc chắn không còn bản ghi trước khi INSERT
+        refreshTokenRepository.deleteByUserId(user.getId());
+        refreshTokenRepository.flush();
+
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setUser(user);
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));
         refreshToken.setToken(UUID.randomUUID().toString());
 
