@@ -4,7 +4,9 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -17,6 +19,13 @@ public class UserProfileResponse {
     private String displayName;
     private String avatarUrl;
     private String statusMessage;
+    private String phone;
+    private String gender;
+    private LocalDate dateOfBirth;
+    private String businessDescription;
     private LocalDateTime lastSeen;
     private Boolean isOnline;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+    private List<String> roles;
 }
