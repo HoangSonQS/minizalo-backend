@@ -87,10 +87,13 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/signin", "/api/auth/signup", "/api/auth/refreshtoken",
+                        .requestMatchers(
+                                "/api/auth/signin", "/api/auth/signin/**",
+                                "/api/auth/signup", "/api/auth/signup/**",
+                                "/api/auth/refreshtoken", "/api/auth/refreshtoken/**",
                                 "/v3/api-docs/**", "/ws/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
                         .permitAll()
-                        .requestMatchers("/api/auth/logout").authenticated()
+                        .requestMatchers("/api/auth/logout", "/api/auth/logout/**").authenticated()
                         .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());
