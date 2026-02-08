@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -32,6 +33,10 @@ public class User {
     private String displayName;
     private String avatarUrl;
     private String statusMessage;
+    private String phone;
+    private String gender;
+    private LocalDate dateOfBirth;
+    private String businessDescription;
     private LocalDateTime lastSeen;
     private Boolean isOnline = false;
     private String fcmToken;

@@ -68,6 +68,7 @@ public class UserServiceImpl implements UserService {
                 encoder.encode(signupRequest.getPassword()));
 
         user.setDisplayName(signupRequest.getName());
+        user.setPhone(signupRequest.getPhone());
 
         Set<Role> roles = new HashSet<>();
         Role userRole = roleRepository.findByName(ERole.ROLE_USER)
@@ -84,6 +85,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public UserProfileResponse getCurrentUserProfile(UserDetails userDetails) {
         User user = userRepository.findByUsername(userDetails.getUsername())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
@@ -101,6 +103,18 @@ public class UserServiceImpl implements UserService {
         }
         if (request.getStatusMessage() != null) {
             user.setStatusMessage(request.getStatusMessage());
+        }
+        if (request.getPhone() != null) {
+            user.setPhone(request.getPhone());
+        }
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
+        }
+        if (request.getBusinessDescription() != null) {
+            user.setBusinessDescription(request.getBusinessDescription());
         }
 
         return mapUserToUserProfileResponse(userRepository.save(user));
@@ -136,6 +150,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserProfileResponse mapUserToUserProfileResponse(User user) {
+        List<String> roleNames = user.getRoles() != null
+                ? user.getRoles().stream()
+                        .map(r -> r.getName().name())
+                        .collect(Collectors.toList())
+                : List.of();
         return new UserProfileResponse(
                 user.getId(),
                 user.getUsername(),
@@ -143,8 +162,15 @@ public class UserServiceImpl implements UserService {
                 user.getDisplayName(),
                 user.getAvatarUrl(),
                 user.getStatusMessage(),
+                user.getPhone(),
+                user.getGender(),
+                user.getDateOfBirth(),
+                user.getBusinessDescription(),
                 user.getLastSeen(),
-                user.getIsOnline());
+                user.getIsOnline(),
+                user.getCreatedAt(),
+                user.getUpdatedAt(),
+                roleNames);
     }
 
     @Override
