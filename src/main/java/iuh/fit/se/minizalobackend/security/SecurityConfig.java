@@ -69,7 +69,8 @@ public class SecurityConfig {
                 "http://localhost:8081",
                 "http://10.0.2.2:8081",
                 "http://localhost:19000",
-                "http://localhost:19006"));
+                "http://localhost:19006",
+                "http://192.168.1.10:8081"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Allow all headers
         configuration.setAllowCredentials(true);
@@ -86,10 +87,13 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/signin", "/api/auth/signup", "/api/auth/refreshtoken",
+                        .requestMatchers(
+                                "/api/auth/signin", "/api/auth/signin/**",
+                                "/api/auth/signup", "/api/auth/signup/**",
+                                "/api/auth/refreshtoken", "/api/auth/refreshtoken/**",
                                 "/v3/api-docs/**", "/ws/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
                         .permitAll()
-                        .requestMatchers("/api/auth/logout").authenticated()
+                        .requestMatchers("/api/auth/logout", "/api/auth/logout/**").authenticated()
                         .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());
