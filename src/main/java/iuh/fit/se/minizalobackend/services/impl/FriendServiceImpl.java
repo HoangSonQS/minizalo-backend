@@ -111,6 +111,7 @@ public class FriendServiceImpl implements FriendService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<FriendResponse> getFriendsList(UUID userId) {
         User currentUser = userService.getUserById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
@@ -120,6 +121,7 @@ public class FriendServiceImpl implements FriendService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<FriendResponse> getPendingFriendRequests(UUID userId) {
         User currentUser = userService.getUserById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
