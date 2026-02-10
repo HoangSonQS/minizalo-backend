@@ -66,7 +66,7 @@ public class AuthControllerIntegrationTest {
         @Test
         void testUserRegistrationAndLogin() throws Exception { // 1. Register a new user
                 SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com",
-                                "Password@123");
+                                "Password@123", null, null);
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))
@@ -128,7 +128,7 @@ public class AuthControllerIntegrationTest {
         @Test
         void testDuplicateUsernameRegistration() throws Exception {
                 SignupRequest signupRequest = new SignupRequest("Duplicate User", "0123456789", "dup@example.com",
-                                "Password@123");
+                                "Password@123", null, null);
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))
@@ -159,7 +159,7 @@ public class AuthControllerIntegrationTest {
         void testChangePassword() throws Exception {
                 // 1. Register and Login
                 SignupRequest signupRequest = new SignupRequest("ChangePassword User", "0999999999", "cp@example.com",
-                                "Password@123");
+                                "Password@123", null, null);
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))

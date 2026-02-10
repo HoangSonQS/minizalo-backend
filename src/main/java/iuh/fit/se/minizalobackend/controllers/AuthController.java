@@ -46,6 +46,10 @@ public class AuthController {
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+
+        // Update online status
+        userService.updateOnlineStatus(userDetails.getId(), true);
+
         String jwt = jwtTokenProvider.generateAccessToken(userDetails.getId().toString());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId().toString());
 

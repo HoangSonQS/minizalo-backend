@@ -57,7 +57,7 @@ public class ChatIntegrationTest {
         userRepository.deleteAll();
 
         // Register and Login
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "Password@123");
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "Password@123", null, null);
         mockMvc.perform(post("/api/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(signupRequest)))

@@ -33,4 +33,6 @@ public interface UserService {
     void changePassword(UUID userId, ChangePasswordRequest request);
 
     void muteConversation(UUID userId, iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request);
+
+    void updateOnlineStatus(UUID userId, boolean isOnline);
 }
