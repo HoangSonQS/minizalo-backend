@@ -5,6 +5,7 @@ import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
 import iuh.fit.se.minizalobackend.models.EFriendStatus;
 import iuh.fit.se.minizalobackend.models.Friend;
 import iuh.fit.se.minizalobackend.models.User;
+import iuh.fit.se.minizalobackend.repository.FriendCategoryAssignmentRepository;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
 import iuh.fit.se.minizalobackend.services.FriendService;
 import iuh.fit.se.minizalobackend.services.UserService;
@@ -23,6 +24,7 @@ import java.util.stream.Collectors;
 public class FriendServiceImpl implements FriendService {
 
     private final FriendRepository friendRepository;
+    private final FriendCategoryAssignmentRepository assignmentRepository;
     private final UserService userService;
 
     @Override
@@ -100,6 +102,10 @@ public class FriendServiceImpl implements FriendService {
                 .orElseThrow(() -> new UsernameNotFoundException("Current user not found with id: " + currentUserId));
         User friendUser = userService.getUserById(friendIdToDelete)
                 .orElseThrow(() -> new UsernameNotFoundException("Friend user not found with id: " + friendIdToDelete));
+
+        // Xóa tất cả thẻ phân loại mà currentUser đã gán cho friendUser
+        assignmentRepository.findByOwnerAndTarget(currentUser, friendUser)
+                .ifPresent(assignmentRepository::delete);
 
         // Delete friendship from current user to friend
         Optional<Friend> friendship1 = friendRepository.findByUserAndFriend(currentUser, friendUser);
