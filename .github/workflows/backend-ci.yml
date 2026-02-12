@@ -90,6 +90,9 @@ jobs:
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B package -DskipTests
 
+    - name: Wait for services
+      run: sleep 15
+
     - name: Run Tests
       env:
         SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
