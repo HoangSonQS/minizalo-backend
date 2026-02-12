@@ -48,6 +48,9 @@ public class AuthControllerIntegrationTest {
         @Autowired
         private UserRepository userRepository;
 
+        @Autowired
+        private iuh.fit.se.minizalobackend.repository.RoleRepository roleRepository;
+
         @MockBean
         private MinioClient minioClient;
 
@@ -55,6 +58,20 @@ public class AuthControllerIntegrationTest {
 
         @BeforeEach
         void setUp() throws Exception {
+                // Initialize roles if not exist (required for test context)
+                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_USER).isEmpty()) {
+                        roleRepository.save(new iuh.fit.se.minizalobackend.models.Role(null,
+                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_USER));
+                }
+                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR).isEmpty()) {
+                        roleRepository.save(new iuh.fit.se.minizalobackend.models.Role(null,
+                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR));
+                }
+                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN).isEmpty()) {
+                        roleRepository.save(new iuh.fit.se.minizalobackend.models.Role(null,
+                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN));
+                }
+
                 // Clear database before each test
                 // userRepository.deleteAll(); // Handled by @Transactional
 
