@@ -10,41 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_USER: myuser
-          POSTGRES_PASSWORD: mypassword
-          POSTGRES_DB: minizalodb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      dynamodb:
-        image: amazon/dynamodb-local:latest
-        ports:
-          - 8000:8000
-        options: >-
-          --health-cmd "true"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
     - uses: actions/checkout@v3
 
@@ -75,34 +40,24 @@ jobs:
 
     - name: Build with Maven
       env:
-        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
-        SPRING_DATASOURCE_USERNAME: myuser
-        SPRING_DATASOURCE_PASSWORD: mypassword
+        SPRING_PROFILES_ACTIVE: test
         APP_JWT_SECRET: secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
         APP_REFRESH_TOKEN_EXPIRATION_DAYS: 7
-        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
-        AWS_ACCESS_KEY_ID: test
-        AWS_SECRET_ACCESS_KEY: test
-        AWS_REGION: us-west-2
         MINIO_ENDPOINT: http://localhost:9000
         MINIO_ACCESS_KEY: test
         MINIO_SECRET_KEY: testtest
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B package -DskipTests
 
+
     - name: Run Tests
       env:
-        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
-        SPRING_DATASOURCE_USERNAME: myuser
-        SPRING_DATASOURCE_PASSWORD: mypassword
+        SPRING_PROFILES_ACTIVE: test
         APP_JWT_SECRET: secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
         APP_REFRESH_TOKEN_EXPIRATION_DAYS: 7
-        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
-        AWS_ACCESS_KEY_ID: test
-        AWS_SECRET_ACCESS_KEY: test
-        AWS_REGION: us-west-2
         MINIO_ENDPOINT: http://localhost:9000
         MINIO_ACCESS_KEY: test
         MINIO_SECRET_KEY: testtest
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B test
+
