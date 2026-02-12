@@ -91,6 +91,26 @@ public class FriendController {
         return ResponseEntity.ok(requests);
     }
 
+    @GetMapping("/requests/sent")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<List<FriendResponse>> getSentFriendRequests(@AuthenticationPrincipal UserDetailsImpl userDetails) {
+        List<FriendResponse> requests = friendService.getSentFriendRequests(userDetails.getId());
+        return ResponseEntity.ok(requests);
+    }
+
+    @DeleteMapping("/request/{requestId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> cancelSentFriendRequest(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @PathVariable UUID requestId) {
+        try {
+            friendService.cancelSentFriendRequest(userDetails.getId(), requestId);
+            return ResponseEntity.ok(new MessageResponse("Friend request cancelled."));
+        } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
     @PostMapping("/block/{userId}")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
     public ResponseEntity<?> blockUser(
@@ -115,5 +135,13 @@ public class FriendController {
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
         }
+    }
+
+    @GetMapping("/blocked")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<List<FriendResponse>> getBlockedUsers(
+            @AuthenticationPrincipal UserDetailsImpl userDetails) {
+        List<FriendResponse> blocked = friendService.getBlockedUsers(userDetails.getId());
+        return ResponseEntity.ok(blocked);
     }
 }
