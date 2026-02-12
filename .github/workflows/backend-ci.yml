@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
     - uses: actions/checkout@v3
 
@@ -49,6 +49,7 @@ jobs:
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B package -DskipTests
 
+
     - name: Run Tests
       env:
         SPRING_PROFILES_ACTIVE: test
@@ -59,3 +60,4 @@ jobs:
         MINIO_SECRET_KEY: testtest
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B test
+
