@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
+@org.springframework.test.context.jdbc.Sql(scripts = "/test-data.sql", executionPhase = org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 public class AuthControllerIntegrationTest {
 
         @Autowired
@@ -48,9 +49,6 @@ public class AuthControllerIntegrationTest {
         @Autowired
         private UserRepository userRepository;
 
-        @Autowired
-        private iuh.fit.se.minizalobackend.repository.RoleRepository roleRepository;
-
         @MockBean
         private MinioClient minioClient;
 
@@ -58,19 +56,7 @@ public class AuthControllerIntegrationTest {
 
         @BeforeEach
         void setUp() throws Exception {
-                // Initialize roles with saveAndFlush for immediate persistence
-                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_USER).isEmpty()) {
-                        roleRepository.saveAndFlush(new iuh.fit.se.minizalobackend.models.Role(null,
-                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_USER));
-                }
-                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR).isEmpty()) {
-                        roleRepository.saveAndFlush(new iuh.fit.se.minizalobackend.models.Role(null,
-                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR));
-                }
-                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN).isEmpty()) {
-                        roleRepository.saveAndFlush(new iuh.fit.se.minizalobackend.models.Role(null,
-                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN));
-                }
+                // Roles initialized by SQL script (test-data.sql)
 
                 // Mock MinioClient behavior
                 when(minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
