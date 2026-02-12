@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional // Added
+@org.springframework.context.annotation.Import(iuh.fit.se.minizalobackend.config.TestDataConfig.class)
 public class AuthControllerIntegrationTest {
 
         @Autowired
@@ -58,19 +59,7 @@ public class AuthControllerIntegrationTest {
 
         @BeforeEach
         void setUp() throws Exception {
-                // Initialize roles if not exist (required for test context)
-                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_USER).isEmpty()) {
-                        roleRepository.save(new iuh.fit.se.minizalobackend.models.Role(null,
-                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_USER));
-                }
-                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR).isEmpty()) {
-                        roleRepository.save(new iuh.fit.se.minizalobackend.models.Role(null,
-                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR));
-                }
-                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN).isEmpty()) {
-                        roleRepository.save(new iuh.fit.se.minizalobackend.models.Role(null,
-                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN));
-                }
+                // Roles are now initialized automatically by TestDataConfig
 
                 // Clear database before each test
                 // userRepository.deleteAll(); // Handled by @Transactional
