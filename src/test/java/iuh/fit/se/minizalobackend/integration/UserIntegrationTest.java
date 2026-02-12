@@ -76,7 +76,7 @@ public class UserIntegrationTest {
                 String uniquePhone = String.format("0987%06d", timestamp); // Always 10 digits: 0987 + 6 digits
                 String uniqueEmail = "test" + timestamp + "@example.com";
 
-                SignupRequest signupRequest = new SignupRequest("Test User", uniquePhone, uniqueEmail, "Password@123");
+                SignupRequest signupRequest = new SignupRequest("Test User", uniquePhone, uniqueEmail, "Password@123", null, null);
                 mockMvc.perform(post("/api/auth/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))

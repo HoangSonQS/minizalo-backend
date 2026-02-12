@@ -69,6 +69,13 @@ public class UserServiceImpl implements UserService {
 
         user.setDisplayName(signupRequest.getName());
         user.setPhone(signupRequest.getPhone());
+        
+        if (signupRequest.getGender() != null) {
+            user.setGender(signupRequest.getGender());
+        }
+        if (signupRequest.getDateOfBirth() != null) {
+            user.setDateOfBirth(signupRequest.getDateOfBirth());
+        }
 
         Set<Role> roles = new HashSet<>();
         Role userRole = roleRepository.findByName(ERole.ROLE_USER)
@@ -253,5 +260,19 @@ public class UserServiceImpl implements UserService {
         }
 
         roomMemberRepository.save(member);
+    }
+
+    @Override
+    @Transactional
+    public void updateOnlineStatus(UUID userId, boolean isOnline) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        
+        user.setIsOnline(isOnline);
+        if (!isOnline) {
+            user.setLastSeen(LocalDateTime.now());
+        }
+        
+        userRepository.save(user);
     }
 }
