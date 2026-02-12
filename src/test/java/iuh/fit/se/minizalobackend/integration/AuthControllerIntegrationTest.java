@@ -49,9 +49,6 @@ public class AuthControllerIntegrationTest {
         @Autowired
         private UserRepository userRepository;
 
-        @Autowired
-        private iuh.fit.se.minizalobackend.repository.RoleRepository roleRepository;
-
         @MockBean
         private MinioClient minioClient;
 
