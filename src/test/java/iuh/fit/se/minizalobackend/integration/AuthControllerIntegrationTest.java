@@ -36,8 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Transactional // Added
-@org.springframework.context.annotation.Import(iuh.fit.se.minizalobackend.config.TestDataConfig.class)
+@Transactional
 public class AuthControllerIntegrationTest {
 
         @Autowired
@@ -49,6 +48,9 @@ public class AuthControllerIntegrationTest {
         @Autowired
         private UserRepository userRepository;
 
+        @Autowired
+        private iuh.fit.se.minizalobackend.repository.RoleRepository roleRepository;
+
         @MockBean
         private MinioClient minioClient;
 
@@ -56,10 +58,19 @@ public class AuthControllerIntegrationTest {
 
         @BeforeEach
         void setUp() throws Exception {
-                // Roles are now initialized automatically by TestDataConfig
-
-                // Clear database before each test
-                // userRepository.deleteAll(); // Handled by @Transactional
+                // Initialize roles with saveAndFlush for immediate persistence
+                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_USER).isEmpty()) {
+                        roleRepository.saveAndFlush(new iuh.fit.se.minizalobackend.models.Role(null,
+                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_USER));
+                }
+                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR).isEmpty()) {
+                        roleRepository.saveAndFlush(new iuh.fit.se.minizalobackend.models.Role(null,
+                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_MODERATOR));
+                }
+                if (roleRepository.findByName(iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN).isEmpty()) {
+                        roleRepository.saveAndFlush(new iuh.fit.se.minizalobackend.models.Role(null,
+                                        iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN));
+                }
 
                 // Mock MinioClient behavior
                 when(minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
