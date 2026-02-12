@@ -75,24 +75,34 @@ jobs:
 
     - name: Build with Maven
       env:
-        SPRING_PROFILES_ACTIVE: test
+        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
+        SPRING_DATASOURCE_USERNAME: myuser
+        SPRING_DATASOURCE_PASSWORD: mypassword
         APP_JWT_SECRET: secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
         APP_REFRESH_TOKEN_EXPIRATION_DAYS: 7
+        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
+        AWS_ACCESS_KEY_ID: test
+        AWS_SECRET_ACCESS_KEY: test
+        AWS_REGION: us-west-2
         MINIO_ENDPOINT: http://localhost:9000
         MINIO_ACCESS_KEY: test
         MINIO_SECRET_KEY: testtest
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B package -DskipTests
 
-
     - name: Run Tests
       env:
-        SPRING_PROFILES_ACTIVE: test
+        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
+        SPRING_DATASOURCE_USERNAME: myuser
+        SPRING_DATASOURCE_PASSWORD: mypassword
         APP_JWT_SECRET: secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
         APP_REFRESH_TOKEN_EXPIRATION_DAYS: 7
+        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
+        AWS_ACCESS_KEY_ID: test
+        AWS_SECRET_ACCESS_KEY: test
+        AWS_REGION: us-west-2
         MINIO_ENDPOINT: http://localhost:9000
         MINIO_ACCESS_KEY: test
         MINIO_SECRET_KEY: testtest
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B test
-
