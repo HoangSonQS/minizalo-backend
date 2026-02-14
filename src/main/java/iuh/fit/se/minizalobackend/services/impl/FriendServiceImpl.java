@@ -6,6 +6,7 @@ import iuh.fit.se.minizalobackend.models.EFriendStatus;
 import iuh.fit.se.minizalobackend.models.Friend;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
+import iuh.fit.se.minizalobackend.services.ChatRoomService;
 import iuh.fit.se.minizalobackend.services.FriendService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class FriendServiceImpl implements FriendService {
 
     private final FriendRepository friendRepository;
     private final UserService userService;
+    private final ChatRoomService chatRoomService;
 
     @Override
     @Transactional
@@ -73,6 +75,9 @@ public class FriendServiceImpl implements FriendService {
         Friend reciprocalFriendship = new Friend(null, friendRequest.getFriend(), friendRequest.getUser(),
                 EFriendStatus.ACCEPTED, null);
         friendRepository.save(reciprocalFriendship);
+
+        // Create direct chat room
+        chatRoomService.createDirectChat(friendRequest.getUser(), friendRequest.getFriend());
 
         return mapFriendToFriendResponse(acceptedRequest);
     }

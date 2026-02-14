@@ -16,6 +16,12 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
+import iuh.fit.se.minizalobackend.services.ChatRoomService;
+import iuh.fit.se.minizalobackend.services.UserService;
+import iuh.fit.se.minizalobackend.models.User;
+import iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+
 
 import java.security.Principal;
 import java.util.List;
@@ -26,12 +32,25 @@ import java.util.UUID;
 @Slf4j
 public class ChatController {
 
+
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ChatRoomService chatRoomService;
+    private final UserService userService;
 
-    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate) {
+    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate, ChatRoomService chatRoomService, UserService userService) {
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
+        this.chatRoomService = chatRoomService;
+        this.userService = userService;
+    }
+
+    @GetMapping("/api/chat/rooms")
+    public ResponseEntity<List<ChatRoomResponse>> getChatRooms(Principal principal) {
+        String userId = getUserIdFromPrincipal(principal);
+        User user = userService.getUserById(UUID.fromString(userId))
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        return ResponseEntity.ok(chatRoomService.getChatRoomsForUser(user));
     }
 
     @MessageMapping("/chat.send")
@@ -76,6 +95,27 @@ public class ChatController {
         log.info("Fetching history for room: {}, limit: {}", roomId, limit);
         PaginatedMessageResult result = messageService.getRoomMessages(roomId, lastKey, limit);
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/api/chat/send")
+    public ResponseEntity<Map<String, Object>> sendMessageRest(
+            @Valid @RequestBody ChatMessageRequest chatMessageRequest,
+            Principal principal) {
+        String senderId = getUserIdFromPrincipal(principal);
+        log.info("REST send message from user: {} to room: {}", senderId, chatMessageRequest.getReceiverId());
+        MessageDynamo message = messageService.processMessage(chatMessageRequest, senderId);
+        
+        // Convert to Map to avoid ClassCastException with Spring DevTools RestartClassLoader
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("messageId", message.getMessageId());
+        response.put("chatRoomId", message.getChatRoomId());
+        response.put("senderId", message.getSenderId());
+        response.put("senderName", message.getSenderName());
+        response.put("content", message.getContent());
+        response.put("type", message.getType());
+        response.put("createdAt", message.getCreatedAt());
+        response.put("read", message.isRead());
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/api/messages")
