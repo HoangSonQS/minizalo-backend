@@ -6,6 +6,7 @@ import iuh.fit.se.minizalobackend.dtos.request.GroupCreationRequest;
 import iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse;
 import iuh.fit.se.minizalobackend.dtos.response.RoomMemberResponse;
 import iuh.fit.se.minizalobackend.dtos.response.UserResponse;
+import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.exception.custom.*;
 import iuh.fit.se.minizalobackend.models.*;
 import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
@@ -19,7 +20,10 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@Slf4j
 public class ChatRoomServiceImpl implements ChatRoomService {
 
     private final ChatRoomRepository chatRoomRepository;
@@ -27,17 +31,20 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     private final GroupEventRepository groupEventRepository;
     private final UserService userService;
     private final ObjectMapper objectMapper;
+    private final iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository;
 
     public ChatRoomServiceImpl(ChatRoomRepository chatRoomRepository,
             RoomMemberRepository roomMemberRepository,
             GroupEventRepository groupEventRepository,
             UserService userService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository) {
         this.chatRoomRepository = chatRoomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.groupEventRepository = groupEventRepository;
         this.userService = userService;
         this.objectMapper = objectMapper;
+        this.messageDynamoRepository = messageDynamoRepository;
     }
 
     @Override
@@ -395,6 +402,92 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         groupEventRepository.save(roleChangeEvent);
 
         return getGroupChatDetails(groupId);
+    }
+
+
+
+    @Override
+    @Transactional
+    public ChatRoomResponse createDirectChat(User user1, User user2) {
+        log.info("Creating/checking direct chat between {} and {}", user1.getUsername(), user2.getUsername());
+        Optional<ChatRoom> existingChat = chatRoomRepository.findDirectChatRoom(user1.getId(), user2.getId(), ERoomType.DIRECT);
+        if (existingChat.isPresent()) {
+            log.info("Found existing direct chat: {}", existingChat.get().getId());
+            return getGroupChatDetails(existingChat.get().getId());
+        }
+
+        log.info("Creating new direct chat");
+        ChatRoom chatRoom = ChatRoom.builder()
+                .type(ERoomType.DIRECT)
+                .createdBy(user1)
+                .build();
+        chatRoom = chatRoomRepository.save(chatRoom);
+
+        RoomMember member1 = RoomMember.builder()
+                .room(chatRoom)
+                .user(user1)
+                .role(ERoomRole.MEMBER)
+                .build();
+        RoomMember member2 = RoomMember.builder()
+                .room(chatRoom)
+                .user(user2)
+                .role(ERoomRole.MEMBER)
+                .build();
+        roomMemberRepository.saveAll(List.of(member1, member2));
+        log.info("New direct chat created: {}", chatRoom.getId());
+
+        return getGroupChatDetails(chatRoom.getId());
+    }
+
+    @Override
+    @Transactional
+    public List<ChatRoomResponse> getChatRoomsForUser(User user) {
+        log.info("Fetching chat rooms for user ID: {}", user.getId());
+        List<RoomMember> memberships = roomMemberRepository.findByUserId(user.getId());
+        log.info("Found {} memberships for user {}", memberships.size(), user.getUsername());
+        List<ChatRoomResponse> responses = new ArrayList<>();
+
+        for (RoomMember membership : memberships) {
+            try {
+                ChatRoom room = membership.getRoom();
+                if (room == null) {
+                    log.warn("Room is null for membership {}", membership.getId());
+                    continue;
+                }
+                
+                log.info("Getting details for room {}", room.getId());
+                ChatRoomResponse response = getGroupChatDetails(room.getId());
+                log.info("Got details for room {}", room.getId());
+
+                if (room.getType() == ERoomType.DIRECT) {
+                    response.getMembers().stream()
+                        .filter(m -> !m.getUser().getId().equals(user.getId()))
+                        .findFirst()
+                        .ifPresent(otherMember -> {
+                            response.setName(otherMember.getUser().getDisplayName());
+                            response.setAvatarUrl(otherMember.getUser().getAvatarUrl());
+                        });
+                }
+
+                // Skip fetching last message from DynamoDB for performance
+                // Messages will load when user enters the specific chat
+                // TODO: Re-enable when DynamoDB performance is fixed
+
+                responses.add(response);
+            } catch (Exception e) {
+                log.error("Error processing membership {}: {}", membership.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sorting {} responses", responses.size());
+        responses.sort((r1, r2) -> {
+             String t1 = r1.getLastMessage() != null ? r1.getLastMessage().getCreatedAt() : (r1.getCreatedAt() != null ? r1.getCreatedAt().toString() : "");
+             String t2 = r2.getLastMessage() != null ? r2.getLastMessage().getCreatedAt() : (r2.getCreatedAt() != null ? r2.getCreatedAt().toString() : "");
+             return t2.compareTo(t1);
+        });
+
+        log.info("Returning {} chat rooms for user", responses.size());
+        return responses;
     }
 
     private UserResponse convertToUserResponse(User user) {
