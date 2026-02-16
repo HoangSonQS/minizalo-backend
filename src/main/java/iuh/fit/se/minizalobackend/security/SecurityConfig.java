@@ -91,7 +91,7 @@ public class SecurityConfig {
                                 "/api/auth/signin", "/api/auth/signin/**",
                                 "/api/auth/signup", "/api/auth/signup/**",
                                 "/api/auth/refreshtoken", "/api/auth/refreshtoken/**",
-                                "/v3/api-docs/**", "/ws/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
+                                "/v3/api-docs/**", "/ws/**", "/ws-raw/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
                         .permitAll()
                         .requestMatchers("/api/auth/logout", "/api/auth/logout/**").authenticated()
                         .anyRequest().authenticated());
