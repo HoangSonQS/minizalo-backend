@@ -469,9 +469,17 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                         });
                 }
 
-                // Skip fetching last message from DynamoDB for performance
-                // Messages will load when user enters the specific chat
-                // TODO: Re-enable when DynamoDB performance is fixed
+                // Fetch last message from DynamoDB
+                try {
+                    PaginatedMessageResult lastMsgResult = messageDynamoRepository.getMessagesByRoomId(
+                            room.getId().toString(), null, 1);
+                    if (lastMsgResult != null && lastMsgResult.getMessages() != null 
+                            && !lastMsgResult.getMessages().isEmpty()) {
+                        response.setLastMessage(lastMsgResult.getMessages().get(0));
+                    }
+                } catch (Exception ex) {
+                    log.warn("Could not fetch last message for room {}: {}", room.getId(), ex.getMessage());
+                }
 
                 responses.add(response);
             } catch (Exception e) {

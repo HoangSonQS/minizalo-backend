@@ -21,11 +21,12 @@ services:
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     container_name: dynamodb-local
+    user: root
     ports:
       - "8000:8000"
     volumes:
       - dynamodb-data:/home/dynamodblocal/data
-    command: -jar DynamoDBLocal.jar -sharedDb -dbPath ./data
+    command: -jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data
 
   minio:
     image: minio/minio:latest
@@ -79,7 +80,7 @@ services:
       - "8080:8080"
     volumes:
       - .:/app
-    command: ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.devtools.restart.enabled=true"
+    command: ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.devtools.restart.enabled=false"
     develop:
       watch:
         - action: sync+restart

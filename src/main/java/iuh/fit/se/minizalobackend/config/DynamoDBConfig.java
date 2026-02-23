@@ -33,6 +33,9 @@ public class DynamoDBConfig {
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(accessKey, secretKey)))
+                .overrideConfiguration(clientConfig -> clientConfig
+                        .apiCallTimeout(java.time.Duration.ofSeconds(5))
+                        .apiCallAttemptTimeout(java.time.Duration.ofSeconds(5)))
                 .build();
     }
 
