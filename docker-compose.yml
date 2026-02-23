@@ -25,9 +25,7 @@ services:
     container_name: dynamodb-local
     ports:
       - "8000:8000"
-    volumes:
-      - dynamodb-data:/home/dynamodblocal/data
-    command: -jar DynamoDBLocal.jar -sharedDb -dbPath ./data
+    command: -jar DynamoDBLocal.jar -inMemory -sharedDb
 
   minio:
     image: minio/minio:latest
@@ -81,7 +79,7 @@ services:
       - "8080:8080"
     volumes:
       - .:/app
-    command: ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.devtools.restart.enabled=true"
+    command: ./mvnw spring-boot:run
     develop:
       watch:
         - action: sync+restart
@@ -116,6 +114,5 @@ services:
 
 volumes:
   minizalo-db-data:
-  dynamodb-data:
   minio-data:
   redis-data:
