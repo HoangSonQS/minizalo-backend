@@ -21,4 +21,8 @@ public interface ChatRoomService {
     void leaveGroup(UUID groupId, User actor);
 
     ChatRoomResponse getGroupChatDetails(UUID groupId);
+
+    ChatRoomResponse createDirectChat(User user1, User user2);
+
+    java.util.List<ChatRoomResponse> getChatRoomsForUser(User user);
 }

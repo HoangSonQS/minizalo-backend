@@ -2,9 +2,9 @@ name: Backend CI/CD
 
 on:
   push:
-    branches: [ main, dev, feature/* ]
+    branches: [ main, develop, feature/* ]
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main, develop ]
 
 jobs:
   build:
@@ -89,6 +89,9 @@ jobs:
         MINIO_SECRET_KEY: testtest
         MINIO_BUCKET_NAME: test
       run: ./mvnw -B package -DskipTests
+
+    - name: Wait for services
+      run: sleep 15
 
     - name: Run Tests
       env:

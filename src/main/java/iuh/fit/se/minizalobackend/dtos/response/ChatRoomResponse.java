@@ -19,5 +19,7 @@ public class ChatRoomResponse {
     private String avatarUrl;
     private UserResponse createdBy;
     private LocalDateTime createdAt;
+    private iuh.fit.se.minizalobackend.models.MessageDynamo lastMessage;
+    private int unreadCount;
     private List<RoomMemberResponse> members;
 }

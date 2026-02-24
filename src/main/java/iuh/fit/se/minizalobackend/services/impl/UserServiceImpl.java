@@ -69,6 +69,13 @@ public class UserServiceImpl implements UserService {
 
         user.setDisplayName(signupRequest.getName());
         user.setPhone(signupRequest.getPhone());
+        
+        if (signupRequest.getGender() != null) {
+            user.setGender(signupRequest.getGender());
+        }
+        if (signupRequest.getDateOfBirth() != null) {
+            user.setDateOfBirth(signupRequest.getDateOfBirth());
+        }
 
         Set<Role> roles = new HashSet<>();
         Role userRole = roleRepository.findByName(ERole.ROLE_USER)
@@ -137,8 +144,23 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<UserProfileResponse> searchUsers(String query) {
-        return userRepository.findByUsernameContainingIgnoreCase(query).stream()
+        String q = query == null ? "" : query.trim();
+        if (q.isEmpty()) {
+            return List.of();
+        }
+
+        // Nếu query là chuỗi toàn số: coi là số điện thoại, yêu cầu khớp chính xác
+        if (q.matches("\\d+")) {
+            return userRepository.findByPhone(q)
+                    .map(this::mapUserToUserProfileResponse)
+                    .map(List::of)
+                    .orElse(List.of());
+        }
+
+        // Ngược lại (chứa chữ cái): cho phép tìm gần đúng theo username
+        return userRepository.findByUsernameContainingIgnoreCase(q).stream()
                 .map(this::mapUserToUserProfileResponse)
                 .collect(Collectors.toList());
     }
@@ -238,5 +260,19 @@ public class UserServiceImpl implements UserService {
         }
 
         roomMemberRepository.save(member);
+    }
+
+    @Override
+    @Transactional
+    public void updateOnlineStatus(UUID userId, boolean isOnline) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        
+        user.setIsOnline(isOnline);
+        if (!isOnline) {
+            user.setLastSeen(LocalDateTime.now());
+        }
+        
+        userRepository.save(user);
     }
 }

@@ -36,7 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Transactional // Added
+@Transactional
+@org.springframework.test.context.jdbc.Sql(scripts = "/test-data.sql", executionPhase = org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 public class AuthControllerIntegrationTest {
 
         @Autowired
@@ -55,8 +56,7 @@ public class AuthControllerIntegrationTest {
 
         @BeforeEach
         void setUp() throws Exception {
-                // Clear database before each test
-                // userRepository.deleteAll(); // Handled by @Transactional
+                // Roles initialized by SQL script (test-data.sql)
 
                 // Mock MinioClient behavior
                 when(minioClient.bucketExists(any(BucketExistsArgs.class))).thenReturn(true);
@@ -66,7 +66,7 @@ public class AuthControllerIntegrationTest {
         @Test
         void testUserRegistrationAndLogin() throws Exception { // 1. Register a new user
                 SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com",
-                                "Password@123");
+                                "Password@123", null, null);
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))
@@ -128,7 +128,7 @@ public class AuthControllerIntegrationTest {
         @Test
         void testDuplicateUsernameRegistration() throws Exception {
                 SignupRequest signupRequest = new SignupRequest("Duplicate User", "0123456789", "dup@example.com",
-                                "Password@123");
+                                "Password@123", null, null);
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))
@@ -159,7 +159,7 @@ public class AuthControllerIntegrationTest {
         void testChangePassword() throws Exception {
                 // 1. Register and Login
                 SignupRequest signupRequest = new SignupRequest("ChangePassword User", "0999999999", "cp@example.com",
-                                "Password@123");
+                                "Password@123", null, null);
                 mockMvc.perform(post(AUTH_API + "/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))

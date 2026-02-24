@@ -5,7 +5,9 @@ import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
 import iuh.fit.se.minizalobackend.models.EFriendStatus;
 import iuh.fit.se.minizalobackend.models.Friend;
 import iuh.fit.se.minizalobackend.models.User;
+import iuh.fit.se.minizalobackend.repository.FriendCategoryAssignmentRepository;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
+import iuh.fit.se.minizalobackend.services.ChatRoomService;
 import iuh.fit.se.minizalobackend.services.FriendService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +25,9 @@ import java.util.stream.Collectors;
 public class FriendServiceImpl implements FriendService {
 
     private final FriendRepository friendRepository;
+    private final FriendCategoryAssignmentRepository assignmentRepository;
     private final UserService userService;
+    private final ChatRoomService chatRoomService;
 
     @Override
     @Transactional
@@ -74,6 +78,9 @@ public class FriendServiceImpl implements FriendService {
                 EFriendStatus.ACCEPTED, null);
         friendRepository.save(reciprocalFriendship);
 
+        // Create direct chat room
+        chatRoomService.createDirectChat(friendRequest.getUser(), friendRequest.getFriend());
+
         return mapFriendToFriendResponse(acceptedRequest);
     }
 
@@ -101,6 +108,10 @@ public class FriendServiceImpl implements FriendService {
         User friendUser = userService.getUserById(friendIdToDelete)
                 .orElseThrow(() -> new UsernameNotFoundException("Friend user not found with id: " + friendIdToDelete));
 
+        // Xóa tất cả thẻ phân loại mà currentUser đã gán cho friendUser
+        assignmentRepository.findByOwnerAndTarget(currentUser, friendUser)
+                .ifPresent(assignmentRepository::delete);
+
         // Delete friendship from current user to friend
         Optional<Friend> friendship1 = friendRepository.findByUserAndFriend(currentUser, friendUser);
         friendship1.ifPresent(friendRepository::delete);
@@ -111,6 +122,7 @@ public class FriendServiceImpl implements FriendService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<FriendResponse> getFriendsList(UUID userId) {
         User currentUser = userService.getUserById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
@@ -120,14 +132,43 @@ public class FriendServiceImpl implements FriendService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<FriendResponse> getPendingFriendRequests(UUID userId) {
         User currentUser = userService.getUserById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
-        // Find requests where current user is the friend (receiver) and status is
-        // PENDING
+        // Các lời mời kết bạn mà current user LÀ NGƯỜI NHẬN (friend) và đang ở
+        // trạng thái PENDING
         return friendRepository.findByFriendAndStatus(currentUser, EFriendStatus.PENDING).stream()
                 .map(this::mapFriendToFriendResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FriendResponse> getSentFriendRequests(UUID userId) {
+        User currentUser = userService.getUserById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
+        // Các lời mời kết bạn mà current user LÀ NGƯỜI GỬI (user) và đang PENDING
+        return friendRepository.findByUserAndStatus(currentUser, EFriendStatus.PENDING).stream()
+                .map(this::mapFriendToFriendResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void cancelSentFriendRequest(UUID currentUserId, UUID requestId) {
+        Friend friendRequest = friendRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Friend request not found."));
+
+        // Chỉ cho phép hủy nếu current user là NGƯỜI GỬI và request vẫn đang pending
+        if (!friendRequest.getUser().getId().equals(currentUserId)) {
+            throw new SecurityException("You are not authorized to cancel this request.");
+        }
+        if (friendRequest.getStatus() != EFriendStatus.PENDING) {
+            throw new IllegalStateException("Friend request is not pending.");
+        }
+
+        friendRepository.delete(friendRequest);
     }
 
     @Override
@@ -166,6 +207,16 @@ public class FriendServiceImpl implements FriendService {
                 throw new IllegalStateException("User is not blocked by you.");
             }
         });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FriendResponse> getBlockedUsers(UUID userId) {
+        User currentUser = userService.getUserById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
+        return friendRepository.findByUserAndStatus(currentUser, EFriendStatus.BLOCKED).stream()
+                .map(this::mapFriendToFriendResponse)
+                .collect(Collectors.toList());
     }
 
     // This method is private and not part of the interface, but it needs to use the

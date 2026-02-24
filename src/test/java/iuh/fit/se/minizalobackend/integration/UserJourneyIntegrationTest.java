@@ -95,7 +95,7 @@ public class UserJourneyIntegrationTest {
                 // --- STEP 1: REGISTER ---
                 String phone = "0123456789";
                 SignupRequest signupRequest = new SignupRequest("Journey User", phone, "journey@example.com",
-                                "Password@123");
+                                "Password@123", null, null);
 
                 mockMvc.perform(post("/api/auth/signup")
                                 .contentType(MediaType.APPLICATION_JSON)

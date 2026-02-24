@@ -162,8 +162,10 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit) {
-        log.debug("Fetching messages from DynamoDB for room: {}, limit: {}", roomId, limit);
-        return messageDynamoRepository.getMessagesByRoomId(roomId.toString(), lastKey, limit);
+        log.info("Fetching messages from DynamoDB for room: {}, limit: {}", roomId, limit);
+        PaginatedMessageResult result = messageDynamoRepository.getMessagesByRoomId(roomId.toString(), lastKey, limit);
+        log.info("Found {} messages for room {}", result.getMessages().size(), roomId);
+        return result;
     }
 
     @Override

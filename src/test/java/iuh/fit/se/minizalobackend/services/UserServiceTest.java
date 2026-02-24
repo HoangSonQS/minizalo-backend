@@ -46,7 +46,7 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Success_UserRole() {
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123");
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null);
 
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
@@ -70,7 +70,7 @@ class UserServiceTest {
     @Test
     void registerNewUser_Failure_UsernameAlreadyExists() {
         SignupRequest signupRequest = new SignupRequest("Existing User", "0987654321", "test@example.com",
-                "password123");
+                "password123", null, null);
 
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(true);
 
@@ -88,7 +88,7 @@ class UserServiceTest {
     @Test
     void registerNewUser_Failure_EmailAlreadyExists() {
         SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "existing@example.com",
-                "password123");
+                "password123", null, null);
 
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(true);
@@ -106,7 +106,7 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Failure_RoleNotFound() {
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123");
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null);
 
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
@@ -176,5 +176,36 @@ class UserServiceTest {
         org.junit.jupiter.api.Assertions.assertTrue(member.isMuted());
         org.junit.jupiter.api.Assertions.assertNotNull(member.getMuteUntil());
         verify(roomMemberRepository).save(member);
+    }
+
+    @Test
+    void updateOnlineStatus_Success() {
+        java.util.UUID userId = java.util.UUID.randomUUID();
+        iuh.fit.se.minizalobackend.models.User user = new iuh.fit.se.minizalobackend.models.User();
+        user.setId(userId);
+        user.setIsOnline(false);
+
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+
+        userServiceImpl.updateOnlineStatus(userId, true);
+
+        org.junit.jupiter.api.Assertions.assertTrue(user.getIsOnline());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateOnlineStatus_Offline() {
+        java.util.UUID userId = java.util.UUID.randomUUID();
+        iuh.fit.se.minizalobackend.models.User user = new iuh.fit.se.minizalobackend.models.User();
+        user.setId(userId);
+        user.setIsOnline(true);
+
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+
+        userServiceImpl.updateOnlineStatus(userId, false);
+
+        org.junit.jupiter.api.Assertions.assertFalse(user.getIsOnline());
+        org.junit.jupiter.api.Assertions.assertNotNull(user.getLastSeen());
+        verify(userRepository).save(user);
     }
 }
