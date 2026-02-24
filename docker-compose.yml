@@ -1,5 +1,3 @@
-
-
 services:
   minizalo-db:
     image: postgres:13-alpine
