@@ -13,6 +13,7 @@ import software.amazon.awssdk.services.dynamodb.model.ResourceInUseException;
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@org.springframework.context.annotation.Profile("!test")
 public class DynamoDbTableInitializer {
 
     private final DynamoDbEnhancedClient enhancedClient;
@@ -24,7 +25,8 @@ public class DynamoDbTableInitializer {
 
         for (int i = 0; i < maxRetries; i++) {
             try {
-                log.info("Attempting to connect to DynamoDB and create table: messages (Attempt {}/{})", i + 1, maxRetries);
+                log.info("Attempting to connect to DynamoDB and create table: messages (Attempt {}/{})", i + 1,
+                        maxRetries);
                 createTable(MessageDynamo.class, "messages");
                 log.info("DynamoDB table initialization completed successfully.");
                 return;

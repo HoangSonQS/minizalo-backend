@@ -23,73 +23,74 @@ import java.net.URI;
 @Configuration
 public class DynamoDBConfig {
 
-    @Value("${aws.dynamodb.endpoint}")
-    private String dynamodbEndpoint;
+        @Value("${aws.dynamodb.endpoint}")
+        private String dynamodbEndpoint;
 
-    @Value("${aws.accessKeyId}")
-    private String accessKey;
+        @Value("${aws.accessKeyId}")
+        private String accessKey;
 
-    @Value("${aws.secretKey}")
-    private String secretKey;
+        @Value("${aws.secretKey}")
+        private String secretKey;
 
-    @Value("${aws.region}")
-    private String region;
+        @Value("${aws.region}")
+        private String region;
 
-    @Bean
-    public DynamoDbClient dynamoDbClient() {
-        return DynamoDbClient.builder()
-                .endpointOverride(URI.create(dynamodbEndpoint))
-                .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
-                .overrideConfiguration(clientConfig -> clientConfig
-                        .apiCallTimeout(java.time.Duration.ofSeconds(5))
-                        .apiCallAttemptTimeout(java.time.Duration.ofSeconds(5)))
-                .build();
-    }
+        @Bean
+        public DynamoDbClient dynamoDbClient() {
+                return DynamoDbClient.builder()
+                                .endpointOverride(URI.create(dynamodbEndpoint))
+                                .region(Region.of(region))
+                                .credentialsProvider(StaticCredentialsProvider.create(
+                                                AwsBasicCredentials.create(accessKey, secretKey)))
+                                .overrideConfiguration(clientConfig -> clientConfig
+                                                .apiCallTimeout(java.time.Duration.ofSeconds(5))
+                                                .apiCallAttemptTimeout(java.time.Duration.ofSeconds(5)))
+                                .build();
+        }
 
-    @Bean
-    public DynamoDbEnhancedClient dynamoDbEnhancedClient(DynamoDbClient dynamoDbClient) {
-        return DynamoDbEnhancedClient.builder()
-                .dynamoDbClient(dynamoDbClient)
-                .build();
-    }
+        @Bean
+        public DynamoDbEnhancedClient dynamoDbEnhancedClient(DynamoDbClient dynamoDbClient) {
+                return DynamoDbEnhancedClient.builder()
+                                .dynamoDbClient(dynamoDbClient)
+                                .build();
+        }
 
-    /** Tự động tạo bảng DynamoDB 'messages' khi khởi động (cần thiết cho -inMemory mode) */
-    @Bean
-    public CommandLineRunner initDynamoDBTables(DynamoDbClient dynamoDbClient) {
-        return args -> {
-            try {
-                dynamoDbClient.createTable(r -> r
-                        .tableName("messages")
-                        .keySchema(
-                                KeySchemaElement.builder()
-                                        .attributeName("chatRoomId")
-                                        .keyType(KeyType.HASH)
-                                        .build(),
-                                KeySchemaElement.builder()
-                                        .attributeName("createdAt")
-                                        .keyType(KeyType.RANGE)
-                                        .build()
-                        )
-                        .attributeDefinitions(
-                                AttributeDefinition.builder()
-                                        .attributeName("chatRoomId")
-                                        .attributeType(ScalarAttributeType.S)
-                                        .build(),
-                                AttributeDefinition.builder()
-                                        .attributeName("createdAt")
-                                        .attributeType(ScalarAttributeType.S)
-                                        .build()
-                        )
-                        .billingMode(BillingMode.PAY_PER_REQUEST)
-                );
-                log.info("✅ DynamoDB table 'messages' created successfully.");
-            } catch (ResourceInUseException e) {
-                log.info("ℹ️ DynamoDB table 'messages' already exists.");
-            } catch (Exception e) {
-                log.error("❌ Failed to create DynamoDB table 'messages': {}", e.getMessage());
-            }
-        };
-    }
+        /**
+         * Tự động tạo bảng DynamoDB 'messages' khi khởi động (cần thiết cho -inMemory
+         * mode)
+         */
+        @Bean
+        @org.springframework.context.annotation.Profile("!test")
+        public CommandLineRunner initDynamoDBTables(DynamoDbClient dynamoDbClient) {
+                return args -> {
+                        try {
+                                dynamoDbClient.createTable(r -> r
+                                                .tableName("messages")
+                                                .keySchema(
+                                                                KeySchemaElement.builder()
+                                                                                .attributeName("chatRoomId")
+                                                                                .keyType(KeyType.HASH)
+                                                                                .build(),
+                                                                KeySchemaElement.builder()
+                                                                                .attributeName("createdAt")
+                                                                                .keyType(KeyType.RANGE)
+                                                                                .build())
+                                                .attributeDefinitions(
+                                                                AttributeDefinition.builder()
+                                                                                .attributeName("chatRoomId")
+                                                                                .attributeType(ScalarAttributeType.S)
+                                                                                .build(),
+                                                                AttributeDefinition.builder()
+                                                                                .attributeName("createdAt")
+                                                                                .attributeType(ScalarAttributeType.S)
+                                                                                .build())
+                                                .billingMode(BillingMode.PAY_PER_REQUEST));
+                                log.info("✅ DynamoDB table 'messages' created successfully.");
+                        } catch (ResourceInUseException e) {
+                                log.info("ℹ️ DynamoDB table 'messages' already exists.");
+                        } catch (Exception e) {
+                                log.error("❌ Failed to create DynamoDB table 'messages': {}", e.getMessage());
+                        }
+                };
+        }
 }
