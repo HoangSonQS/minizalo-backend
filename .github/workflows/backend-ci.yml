@@ -93,5 +93,38 @@ jobs:
     - name: Wait for services
       run: sleep 15
 
+    - name: Create application-test.properties
+      run: |
+        cat <<EOF > src/test/resources/application-test.properties
+        # Database Configuration (H2 In-Memory)
+        spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+        spring.datasource.driverClassName=org.h2.Driver
+        spring.datasource.username=sa
+        spring.datasource.password=
+        spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+        spring.jpa.hibernate.ddl-auto=create-drop
+        spring.jpa.show-sql=false
+        
+        # App Configuration
+        app.jwtSecret=secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
+        app.access.token.expiration.minutes=60
+        app.refresh.token.expiration.days=7
+        
+        # AWS DynamoDB Configuration (Local for testing)
+        aws.dynamodb.endpoint=http://localhost:8000
+        aws.accessKeyId=test
+        aws.secretKey=test
+        aws.region=us-west-2
+        
+        # MinIO Configuration
+        minio.endpoint=http://localhost:9000
+        minio.accessKey=test
+        minio.secretKey=testtest
+        minio.bucketName=test
+        
+        # Firebase Configuration
+        firebase.service-account.path=firebase-service-account.json
+        EOF
+
     - name: Run Tests
       run: ./mvnw -B test
