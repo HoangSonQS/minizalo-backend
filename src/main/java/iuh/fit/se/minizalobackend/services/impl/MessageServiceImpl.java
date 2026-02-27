@@ -106,6 +106,15 @@ public class MessageServiceImpl implements MessageService {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
+        if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
+            boolean exists = messageDynamoRepository
+                    .getMessage(request.getReceiverId(), request.getReplyToMessageId())
+                    .isPresent();
+            if (!exists) {
+                throw new IllegalArgumentException("Reply target message not found in this room");
+            }
+        }
+
         MessageDynamo message = new MessageDynamo();
         message.setMessageId(UUID.randomUUID().toString());
         message.setChatRoomId(request.getReceiverId()); // In this app roomId = receiverId for 1:1 or groupId
@@ -170,12 +179,20 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void recallMessage(String chatRoomId, String messageId) {
+        recallMessage(chatRoomId, messageId, null);
+    }
+
+    @Override
+    public void recallMessage(String chatRoomId, String messageId, String requesterId) {
         messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
+            if (requesterId != null && message.getSenderId() != null && !requesterId.equals(message.getSenderId())) {
+                throw new IllegalArgumentException("Only sender can recall this message");
+            }
             Instant createdAt = Instant.parse(message.getCreatedAt());
             Instant now = Instant.now();
 
-            // Allow recall only within 24 hours
-            if (now.isBefore(createdAt.plus(24, java.time.temporal.ChronoUnit.HOURS))) {
+            // Allow recall only within 5 minutes
+            if (now.isBefore(createdAt.plus(5, java.time.temporal.ChronoUnit.MINUTES))) {
                 message.setRecalled(true);
                 message.setRecalledAt(now.toString());
                 messageDynamoRepository.save(message);
@@ -188,8 +205,8 @@ public class MessageServiceImpl implements MessageService {
 
                 log.info("Message {} recalled in room {}", messageId, chatRoomId);
             } else {
-                log.warn("Recall failed: Message {} is older than 24 hours", messageId);
-                throw new IllegalArgumentException("Cannot recall message after 24 hours");
+                log.warn("Recall failed: Message {} is older than 5 minutes", messageId);
+                throw new IllegalArgumentException("Cannot recall message after 5 minutes");
             }
         });
     }
@@ -241,8 +258,37 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
+    public void removeReaction(String chatRoomId, String messageId, String userId) {
+        messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
+            if (message.getReactions() == null) {
+                message.setReactions(new ArrayList<>());
+            }
+            boolean changed = message.getReactions().removeIf(r -> r.getUserId().equals(userId));
+            if (!changed) {
+                return;
+            }
+
+            messageDynamoRepository.save(message);
+
+            // Broadcast reaction removal (emoji = null)
+            String destination = "/topic/chat/" + chatRoomId + "/reaction";
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("messageId", messageId);
+            payload.put("userId", userId);
+            payload.put("emoji", null);
+            messagingTemplate.convertAndSend(destination, payload);
+        });
+    }
+
+    @Override
     public void pinMessage(String chatRoomId, String messageId, boolean pin) {
         messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
+            if (pin && !message.isPinned()) {
+                long pinnedCount = messageDynamoRepository.countPinnedMessages(chatRoomId);
+                if (pinnedCount >= 5) {
+                    throw new IllegalStateException("Chỉ được pin tối đa 5 tin nhắn trong một cuộc trò chuyện.");
+                }
+            }
             message.setPinned(pin);
             messageDynamoRepository.save(message);
 
@@ -254,6 +300,12 @@ public class MessageServiceImpl implements MessageService {
 
             log.info("Message {} {} in room {}", messageId, pin ? "pinned" : "unpinned", chatRoomId);
         });
+    }
+
+    @Override
+    public PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit) {
+        log.info("Fetching pinned messages from DynamoDB for room: {}, limit: {}", roomId, limit);
+        return messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey, limit);
     }
 
     private String determineMessageType(ChatMessageRequest request) {

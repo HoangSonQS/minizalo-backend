@@ -10,6 +10,7 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.Expression;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.model.PageIterable;
 import software.amazon.awssdk.enhanced.dynamodb.model.Page;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryEnhancedRequest;
@@ -74,6 +75,63 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
         return pagedResult.items().stream()
                 .filter(m -> messageId.equals(m.getMessageId()))
                 .findFirst();
+    }
+
+    @Override
+    public PaginatedMessageResult getPinnedMessagesByRoomId(String chatRoomId, String lastEvaluatedKey, int limit) {
+        QueryConditional queryConditional = QueryConditional
+                .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
+
+        Expression filterExpression = Expression.builder()
+                .expression("isPinned = :pinned")
+                .putExpressionValue(":pinned", AttributeValue.builder().bool(true).build())
+                .build();
+
+        QueryEnhancedRequest.Builder requestBuilder = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .filterExpression(filterExpression)
+                .limit(limit)
+                .scanIndexForward(false);
+
+        if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
+            Map<String, AttributeValue> startKey = deserializeExclusiveStartKey(lastEvaluatedKey);
+            requestBuilder.exclusiveStartKey(startKey);
+        }
+
+        var pagedResult = messageTable.query(requestBuilder.build());
+        Optional<Page<MessageDynamo>> firstPage = pagedResult.stream().findFirst();
+
+        if (firstPage.isPresent()) {
+            Page<MessageDynamo> page = firstPage.get();
+            List<MessageDynamo> messages = page.items();
+            String newLastEvaluatedKey = serializeExclusiveStartKey(page.lastEvaluatedKey());
+            return new PaginatedMessageResult(messages, newLastEvaluatedKey);
+        } else {
+            return new PaginatedMessageResult(Collections.emptyList(), null);
+        }
+    }
+
+    @Override
+    public long countPinnedMessages(String chatRoomId) {
+        QueryConditional queryConditional = QueryConditional
+                .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
+
+        Expression filterExpression = Expression.builder()
+                .expression("isPinned = :pinned")
+                .putExpressionValue(":pinned", AttributeValue.builder().bool(true).build())
+                .build();
+
+        QueryEnhancedRequest request = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .filterExpression(filterExpression)
+                .build();
+
+        PageIterable<MessageDynamo> pages = messageTable.query(request);
+        long count = 0L;
+        for (Page<MessageDynamo> page : pages) {
+            count += page.items().size();
+        }
+        return count;
     }
 
     @Override

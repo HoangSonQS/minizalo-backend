@@ -10,6 +10,10 @@ public interface MessageDynamoRepository {
 
     java.util.Optional<MessageDynamo> getMessage(String chatRoomId, String messageId);
 
+    PaginatedMessageResult getPinnedMessagesByRoomId(String chatRoomId, String lastEvaluatedKey, int limit);
+
+    long countPinnedMessages(String chatRoomId);
+
     iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse searchMessages(String chatRoomId, String query,
             int limit, String lastEvaluatedKey);
 }

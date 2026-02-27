@@ -13,5 +13,7 @@ import java.util.UUID;
 public interface FriendCategoryAssignmentRepository extends JpaRepository<FriendCategoryAssignment, UUID> {
     Optional<FriendCategoryAssignment> findByOwnerAndTarget(User owner, User target);
     List<FriendCategoryAssignment> findByOwner(User owner);
+
+    long deleteByOwnerAndTarget(User owner, User target);
 }
 

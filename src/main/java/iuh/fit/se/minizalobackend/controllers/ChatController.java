@@ -82,6 +82,32 @@ public class ChatController {
         messageService.addReaction(request.getRoomId(), request.getMessageId(), userId, request.getEmoji());
     }
 
+    @PutMapping("/api/chat/{roomId}/messages/{messageId}/reactions")
+    public ResponseEntity<Void> setReaction(
+            @PathVariable String roomId,
+            @PathVariable String messageId,
+            @RequestBody Map<String, Object> body,
+            Principal principal) {
+        String userId = getUserIdFromPrincipal(principal);
+        Object emojiObj = body != null ? body.get("emoji") : null;
+        String emoji = emojiObj instanceof String ? (String) emojiObj : null;
+        if (emoji == null || emoji.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        messageService.addReaction(roomId, messageId, userId, emoji);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/api/chat/{roomId}/messages/{messageId}/reactions")
+    public ResponseEntity<Void> removeReaction(
+            @PathVariable String roomId,
+            @PathVariable String messageId,
+            Principal principal) {
+        String userId = getUserIdFromPrincipal(principal);
+        messageService.removeReaction(roomId, messageId, userId);
+        return ResponseEntity.ok().build();
+    }
+
     @MessageMapping("/chat.pin")
     public void handlePinMessage(@Payload @Valid PinMessageRequest request, Principal principal) {
         messageService.pinMessage(request.getRoomId(), request.getMessageId(), request.isPin());
@@ -94,6 +120,16 @@ public class ChatController {
             @RequestParam(defaultValue = "20") int limit) {
         log.info("Fetching history for room: {}, limit: {}", roomId, limit);
         PaginatedMessageResult result = messageService.getRoomMessages(roomId, lastKey, limit);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/api/chat/{roomId}/pins")
+    public ResponseEntity<PaginatedMessageResult> getPinnedMessages(
+            @PathVariable UUID roomId,
+            @RequestParam(required = false) String lastKey,
+            @RequestParam(defaultValue = "20") int limit) {
+        log.info("Fetching pinned messages for room: {}, limit: {}", roomId, limit);
+        PaginatedMessageResult result = messageService.getPinnedMessages(roomId, lastKey, limit);
         return ResponseEntity.ok(result);
     }
 
@@ -151,9 +187,10 @@ public class ChatController {
         return ResponseEntity.ok(forwarded);
     }
 
-    @PostMapping("/messages/recall")
-    public void recallMessage(@RequestBody RecallMessageRequest recallMessageRequest) {
-        messageService.recallMessage(recallMessageRequest.getRoomId(), recallMessageRequest.getMessageId());
+    @PostMapping("/api/messages/recall")
+    public void recallMessage(@RequestBody RecallMessageRequest recallMessageRequest, Principal principal) {
+        String requesterId = getUserIdFromPrincipal(principal);
+        messageService.recallMessage(recallMessageRequest.getRoomId(), recallMessageRequest.getMessageId(), requesterId);
     }
 
     @GetMapping("/api/chat/{roomId}/search")

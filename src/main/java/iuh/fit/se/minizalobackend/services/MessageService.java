@@ -13,11 +13,17 @@ public interface MessageService {
 
     void recallMessage(String chatRoomId, String messageId);
 
+    void recallMessage(String chatRoomId, String messageId, String requesterId);
+
     void markMessageAsRead(String chatRoomId, String messageId, String userId);
 
     void addReaction(String chatRoomId, String messageId, String userId, String emoji);
 
+    void removeReaction(String chatRoomId, String messageId, String userId);
+
     void pinMessage(String chatRoomId, String messageId, boolean pin);
+
+    PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit);
 
     MessageDynamo forwardMessage(String originalRoomId, String originalMessageId, String targetRoomId, String senderId);
 
