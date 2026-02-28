@@ -238,22 +238,25 @@ public class MessageServiceImpl implements MessageService {
             if (message.getReactions() == null) {
                 message.setReactions(new ArrayList<>());
             }
-            // Remove existing reaction from this user if any
-            message.getReactions().removeIf(r -> r.getUserId().equals(userId));
-
-            message.getReactions().add(MessageReaction.builder()
-                    .userId(userId)
-                    .emoji(emoji)
-                    .build());
+            // Toggle: nếu (userId, emoji) đã tồn tại thì xóa; không thì thêm (cho phép nhiều reaction/user)
+            boolean removed = message.getReactions().removeIf(r ->
+                    r.getUserId().equals(userId) && emoji.equals(r.getEmoji()));
+            if (!removed) {
+                message.getReactions().add(MessageReaction.builder()
+                        .userId(userId)
+                        .emoji(emoji)
+                        .build());
+            }
 
             messageDynamoRepository.save(message);
 
-            // Broadcast reaction
             String destination = "/topic/chat/" + chatRoomId + "/reaction";
-            messagingTemplate.convertAndSend(destination, Map.of(
-                    "messageId", messageId,
-                    "userId", userId,
-                    "emoji", emoji));
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("messageId", messageId);
+            payload.put("userId", userId);
+            payload.put("emoji", emoji);
+            payload.put("action", removed ? "remove" : "add");
+            messagingTemplate.convertAndSend(destination, payload);
         });
     }
 
@@ -270,12 +273,12 @@ public class MessageServiceImpl implements MessageService {
 
             messageDynamoRepository.save(message);
 
-            // Broadcast reaction removal (emoji = null)
             String destination = "/topic/chat/" + chatRoomId + "/reaction";
             Map<String, Object> payload = new java.util.HashMap<>();
             payload.put("messageId", messageId);
             payload.put("userId", userId);
             payload.put("emoji", null);
+            payload.put("action", "removeAll");
             messagingTemplate.convertAndSend(destination, payload);
         });
     }
