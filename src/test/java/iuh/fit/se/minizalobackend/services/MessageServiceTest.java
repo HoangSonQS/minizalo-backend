@@ -116,9 +116,11 @@ class MessageServiceTest {
         pinned.setMessageId(UUID.randomUUID().toString());
         pinned.setPinned(true);
         pinned.setCreatedAt(Instant.now().toString());
-        PaginatedMessageResult expectedResult = new PaginatedMessageResult(Collections.singletonList(pinned), "nextKey");
+        PaginatedMessageResult expectedResult = new PaginatedMessageResult(Collections.singletonList(pinned),
+                "nextKey");
 
-        when(messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey, limit)).thenReturn(expectedResult);
+        when(messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey, limit))
+                .thenReturn(expectedResult);
 
         PaginatedMessageResult actualResult = messageService.getPinnedMessages(roomId, lastKey, limit);
 
@@ -181,7 +183,8 @@ class MessageServiceTest {
 
         assertDoesNotThrow(() -> messageService.pinMessage(chatRoomId, messageId, true));
         verify(messageDynamoRepository, times(1)).save(any(MessageDynamo.class));
-        verify(messagingTemplate, times(1)).convertAndSend(contains("/topic/chat/" + chatRoomId + "/pin"), any(Object.class));
+        verify(messagingTemplate, times(1)).convertAndSend(contains("/topic/chat/" + chatRoomId + "/pin"),
+                any(Object.class));
     }
 
     @Test
@@ -196,6 +199,7 @@ class MessageServiceTest {
         assertDoesNotThrow(() -> messageService.removeReaction(chatRoomId, messageId, "u1"));
 
         verify(messageDynamoRepository, times(1)).save(any(MessageDynamo.class));
-        verify(messagingTemplate, times(1)).convertAndSend(contains("/topic/chat/" + chatRoomId + "/reaction"), any(Object.class));
+        verify(messagingTemplate, times(1)).convertAndSend(contains("/topic/chat/" + chatRoomId + "/reaction"),
+                any(Object.class));
     }
 }
