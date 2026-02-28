@@ -238,15 +238,11 @@ public class MessageServiceImpl implements MessageService {
             if (message.getReactions() == null) {
                 message.setReactions(new ArrayList<>());
             }
-            // Toggle: nếu (userId, emoji) đã tồn tại thì xóa; không thì thêm (cho phép nhiều reaction/user)
-            boolean removed = message.getReactions().removeIf(r ->
-                    r.getUserId().equals(userId) && emoji.equals(r.getEmoji()));
-            if (!removed) {
-                message.getReactions().add(MessageReaction.builder()
-                        .userId(userId)
-                        .emoji(emoji)
-                        .build());
-            }
+            // Luôn thêm reaction mới (cho phép nhiều reaction cùng loại từ cùng user)
+            message.getReactions().add(MessageReaction.builder()
+                    .userId(userId)
+                    .emoji(emoji)
+                    .build());
 
             messageDynamoRepository.save(message);
 
@@ -255,7 +251,7 @@ public class MessageServiceImpl implements MessageService {
             payload.put("messageId", messageId);
             payload.put("userId", userId);
             payload.put("emoji", emoji);
-            payload.put("action", removed ? "remove" : "add");
+            payload.put("action", "add");
             messagingTemplate.convertAndSend(destination, payload);
         });
     }
