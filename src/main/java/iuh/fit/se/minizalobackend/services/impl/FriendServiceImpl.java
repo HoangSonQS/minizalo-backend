@@ -108,9 +108,9 @@ public class FriendServiceImpl implements FriendService {
         User friendUser = userService.getUserById(friendIdToDelete)
                 .orElseThrow(() -> new UsernameNotFoundException("Friend user not found with id: " + friendIdToDelete));
 
-        // Xóa tất cả thẻ phân loại mà currentUser đã gán cho friendUser
-        assignmentRepository.findByOwnerAndTarget(currentUser, friendUser)
-                .ifPresent(assignmentRepository::delete);
+        // Xóa thẻ phân loại 2 chiều (A gán cho B, và B gán cho A nếu có)
+        assignmentRepository.deleteByOwnerAndTarget(currentUser, friendUser);
+        assignmentRepository.deleteByOwnerAndTarget(friendUser, currentUser);
 
         // Delete friendship from current user to friend
         Optional<Friend> friendship1 = friendRepository.findByUserAndFriend(currentUser, friendUser);
@@ -181,6 +181,10 @@ public class FriendServiceImpl implements FriendService {
                 .orElseThrow(() -> new UsernameNotFoundException("Blocker not found with id: " + blockerId));
         User blocked = userService.getUserById(blockedId)
                 .orElseThrow(() -> new UsernameNotFoundException("Blocked user not found with id: " + blockedId));
+
+        // Xóa thẻ phân loại 2 chiều (nếu còn) trước khi chặn
+        assignmentRepository.deleteByOwnerAndTarget(blocker, blocked);
+        assignmentRepository.deleteByOwnerAndTarget(blocked, blocker);
 
         // Remove any existing friendship/request between them
         friendRepository.findByUserAndFriend(blocker, blocked).ifPresent(friendRepository::delete);
