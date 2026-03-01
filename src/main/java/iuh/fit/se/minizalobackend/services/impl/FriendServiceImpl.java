@@ -182,17 +182,28 @@ public class FriendServiceImpl implements FriendService {
         User blocked = userService.getUserById(blockedId)
                 .orElseThrow(() -> new UsernameNotFoundException("Blocked user not found with id: " + blockedId));
 
-        // Xóa thẻ phân loại 2 chiều (nếu còn) trước khi chặn
-        assignmentRepository.deleteByOwnerAndTarget(blocker, blocked);
-        assignmentRepository.deleteByOwnerAndTarget(blocked, blocker);
+        // Check if already blocked
+        Optional<Friend> existingBlock = friendRepository.findByUserAndFriend(blocker, blocked);
+        if (existingBlock.isPresent() && existingBlock.get().getStatus() == EFriendStatus.BLOCKED) {
+            throw new IllegalArgumentException("User is already blocked.");
+        }
 
-        // Remove any existing friendship/request between them
-        friendRepository.findByUserAndFriend(blocker, blocked).ifPresent(friendRepository::delete);
-        friendRepository.findByUserAndFriend(blocked, blocker).ifPresent(friendRepository::delete);
-
-        // Create a new block entry
-        Friend blockEntry = new Friend(null, blocker, blocked, EFriendStatus.BLOCKED, null);
-        friendRepository.save(blockEntry);
+        // If there is an existing ACCEPTED/PENDING entry from blocker -> blocked, keep
+        // it
+        // We create a separate BLOCKED entry. The existing friendship stays intact.
+        // But if the existing entry is from blocker->blocked with ACCEPTED status,
+        // we change it to BLOCKED to reuse the row.
+        if (existingBlock.isPresent()) {
+            existingBlock.get().setStatus(EFriendStatus.BLOCKED);
+            friendRepository.save(existingBlock.get());
+        } else {
+            // Create a new block entry
+            Friend blockEntry = new Friend(null, blocker, blocked, EFriendStatus.BLOCKED, null);
+            friendRepository.save(blockEntry);
+        }
+        // NOTE: We do NOT delete the reverse friendship entry (blocked -> blocker)
+        // so the blocked user still sees the friend in their friends list.
+        // The block check in messaging will prevent communication.
     }
 
     @Override
@@ -206,7 +217,17 @@ public class FriendServiceImpl implements FriendService {
         Optional<Friend> blockEntry = friendRepository.findByUserAndFriend(unblocker, unblocked);
         blockEntry.ifPresent(entry -> {
             if (entry.getStatus() == EFriendStatus.BLOCKED) {
-                friendRepository.delete(entry);
+                // Check if there's a reverse friendship entry (friend -> blocker with ACCEPTED)
+                // If yes, restore this entry to ACCEPTED as well
+                Optional<Friend> reverseEntry = friendRepository.findByUserAndFriend(unblocked, unblocker);
+                if (reverseEntry.isPresent() && reverseEntry.get().getStatus() == EFriendStatus.ACCEPTED) {
+                    // Restore the friendship - set back to ACCEPTED
+                    entry.setStatus(EFriendStatus.ACCEPTED);
+                    friendRepository.save(entry);
+                } else {
+                    // No reverse friendship exists, just delete the block entry
+                    friendRepository.delete(entry);
+                }
             } else {
                 throw new IllegalStateException("User is not blocked by you.");
             }
@@ -231,5 +252,35 @@ public class FriendServiceImpl implements FriendService {
         UserProfileResponse friendUser = userService.mapUserToUserProfileResponse(friend.getFriend()); // Changed to
                                                                                                        // UserProfileResponse
         return new FriendResponse(friend.getId(), user, friendUser, friend.getStatus(), friend.getCreatedAt());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Object> checkBlockStatus(UUID currentUserId, UUID otherUserId) {
+        User currentUser = userService.getUserById(currentUserId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + currentUserId));
+        User otherUser = userService.getUserById(otherUserId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + otherUserId));
+
+        boolean blockedByYou = false;
+        boolean blockedByOther = false;
+        String blockerName = null;
+
+        Optional<Friend> youBlockOther = friendRepository.findByUserAndFriend(currentUser, otherUser);
+        if (youBlockOther.isPresent() && youBlockOther.get().getStatus() == EFriendStatus.BLOCKED) {
+            blockedByYou = true;
+        }
+
+        Optional<Friend> otherBlockYou = friendRepository.findByUserAndFriend(otherUser, currentUser);
+        if (otherBlockYou.isPresent() && otherBlockYou.get().getStatus() == EFriendStatus.BLOCKED) {
+            blockedByOther = true;
+            blockerName = otherUser.getDisplayName() != null ? otherUser.getDisplayName() : otherUser.getUsername();
+        }
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("blockedByYou", blockedByYou);
+        result.put("blockedByOther", blockedByOther);
+        result.put("blockerName", blockerName);
+        return result;
     }
 }
