@@ -4,8 +4,14 @@ import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
+import iuh.fit.se.minizalobackend.models.EFriendStatus;
+import iuh.fit.se.minizalobackend.models.Friend;
 import iuh.fit.se.minizalobackend.models.MessageReaction;
 import iuh.fit.se.minizalobackend.models.RoomMember;
+import iuh.fit.se.minizalobackend.models.ChatRoom;
+import iuh.fit.se.minizalobackend.models.ERoomType;
+import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
+import iuh.fit.se.minizalobackend.repository.FriendRepository;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
@@ -25,6 +31,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -35,6 +42,8 @@ public class MessageServiceImpl implements MessageService {
     private final MessageDynamoRepository messageDynamoRepository;
     private final GroupRepository groupRepository;
     private final RoomMemberRepository roomMemberRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final FriendRepository friendRepository;
     private final UserPresenceService userPresenceService;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
@@ -105,6 +114,42 @@ public class MessageServiceImpl implements MessageService {
     public MessageDynamo processMessage(ChatMessageRequest request, String senderId) {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
+
+        // ── Block check for DIRECT chat rooms ──
+        String roomIdStr = request.getReceiverId();
+        try {
+            UUID roomUuid = UUID.fromString(roomIdStr);
+            Optional<ChatRoom> roomOpt = chatRoomRepository.findById(roomUuid);
+            if (roomOpt.isPresent() && roomOpt.get().getType() == ERoomType.DIRECT) {
+                List<RoomMember> members = roomMemberRepository.findAllByRoom(roomOpt.get());
+                // Find the other participant
+                Optional<User> otherUserOpt = members.stream()
+                        .map(RoomMember::getUser)
+                        .filter(u -> !u.getId().toString().equals(senderId))
+                        .findFirst();
+                if (otherUserOpt.isPresent()) {
+                    User otherUser = otherUserOpt.get();
+                    // Check if sender blocked other user
+                    Optional<Friend> senderBlockedOther = friendRepository.findByUserAndFriend(sender, otherUser);
+                    if (senderBlockedOther.isPresent()
+                            && senderBlockedOther.get().getStatus() == EFriendStatus.BLOCKED) {
+                        throw new IllegalStateException("BLOCKED_BY_YOU");
+                    }
+                    // Check if other user blocked sender
+                    Optional<Friend> otherBlockedSender = friendRepository.findByUserAndFriend(otherUser, sender);
+                    if (otherBlockedSender.isPresent()
+                            && otherBlockedSender.get().getStatus() == EFriendStatus.BLOCKED) {
+                        String blockerName = otherUser.getDisplayName() != null ? otherUser.getDisplayName()
+                                : otherUser.getUsername();
+                        throw new IllegalStateException("BLOCKED_BY_OTHER:" + blockerName);
+                    }
+                }
+            }
+        } catch (IllegalStateException e) {
+            throw e; // re-throw block exceptions
+        } catch (Exception e) {
+            log.warn("Block check failed (non-critical): {}", e.getMessage());
+        }
 
         if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
             boolean exists = messageDynamoRepository

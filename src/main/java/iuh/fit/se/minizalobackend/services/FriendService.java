@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.services;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public interface FriendService {
@@ -28,4 +29,7 @@ public interface FriendService {
 
     // Danh sách user mà current user đã chặn (BLOCKED)
     List<iuh.fit.se.minizalobackend.payload.response.FriendResponse> getBlockedUsers(UUID userId);
+
+    // Kiểm tra trạng thái chặn giữa hai user
+    Map<String, Object> checkBlockStatus(UUID currentUserId, UUID otherUserId);
 }
