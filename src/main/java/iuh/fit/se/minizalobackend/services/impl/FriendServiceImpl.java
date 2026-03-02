@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -126,7 +127,12 @@ public class FriendServiceImpl implements FriendService {
     public List<FriendResponse> getFriendsList(UUID userId) {
         User currentUser = userService.getUserById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
-        return friendRepository.findByUserAndStatus(currentUser, EFriendStatus.ACCEPTED).stream()
+        // Danh bạ cần hiển thị cả bạn bè đang ACCEPTED lẫn những người đã bị chặn tin nhắn
+        // (BLOCKED) để chặn chỉ ảnh hưởng tới chat, không làm mất bạn khỏi danh sách.
+        var accepted = friendRepository.findByUserAndStatus(currentUser, EFriendStatus.ACCEPTED);
+        var blocked = friendRepository.findByUserAndStatus(currentUser, EFriendStatus.BLOCKED);
+
+        return Stream.concat(accepted.stream(), blocked.stream())
                 .map(this::mapFriendToFriendResponse)
                 .collect(Collectors.toList());
     }
