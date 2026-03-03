@@ -30,4 +30,15 @@ public interface MessageService {
     MessageDynamo processMessage(ChatMessageRequest request, String senderId);
 
     SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey);
+
+    /**
+     * Tìm kiếm tin nhắn toàn cục trên tất cả các phòng mà userId là thành viên.
+     * Kết quả được gộp lại và sắp xếp theo thời gian giảm dần.
+     *
+     * @param userId userId của người đang search
+     * @param query  từ khóa tìm kiếm
+     * @param limit  số kết quả tối đa
+     * @return SearchMessageResponse chứa danh sách tin nhắn khớp
+     */
+    SearchMessageResponse searchMessagesGlobal(String userId, String query, int limit);
 }

@@ -202,4 +202,18 @@ public class ChatController {
         log.info("Searching messages in room: {}, query: {}", roomId, q);
         return ResponseEntity.ok(messageService.searchMessages(roomId, q, limit, lastKey));
     }
+
+    /**
+     * Tìm kiếm tin nhắn toàn cục (across all rooms user belongs to).
+     * GET /api/messages/search?q=keyword&limit=20
+     */
+    @GetMapping("/api/messages/search")
+    public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse> searchMessagesGlobal(
+            @RequestParam String q,
+            @RequestParam(defaultValue = "20") int limit,
+            Principal principal) {
+        String userId = getUserIdFromPrincipal(principal);
+        log.info("Global search messages, userId={}, query='{}', limit={}", userId, q, limit);
+        return ResponseEntity.ok(messageService.searchMessagesGlobal(userId, q, limit));
+    }
 }
