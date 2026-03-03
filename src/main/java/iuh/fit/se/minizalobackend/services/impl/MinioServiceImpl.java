@@ -21,6 +21,14 @@ public class MinioServiceImpl implements MinioService {
     @Value("${minio.bucketName}")
     private String bucketName;
 
+    /**
+     * Public-facing MinIO base URL (accessible from the browser).
+     * Defaults to the same as minio.endpoint if not separately configured.
+     * Example: http://192.168.1.7:9000
+     */
+    @Value("${minio.publicUrl:${minio.endpoint}}")
+    private String publicUrl;
+
     public MinioServiceImpl(MinioClient minioClient) {
         this.minioClient = minioClient;
     }
@@ -51,7 +59,7 @@ public class MinioServiceImpl implements MinioService {
         } catch (Exception e) {
             throw new RuntimeException("Error uploading file to MinIO: " + e.getMessage(), e);
         }
-        return "/" + bucketName + "/" + objectName;
+        return publicUrl.replaceAll("/+$", "") + "/" + bucketName + "/" + objectName;
     }
 
     @Override

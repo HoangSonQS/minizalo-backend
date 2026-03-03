@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -371,5 +372,48 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey) {
         return messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey);
+    }
+
+    @Override
+    public SearchMessageResponse searchMessagesGlobal(String userId, String query, int limit) {
+        if (query == null || query.isBlank()) {
+            return new SearchMessageResponse(Collections.emptyList(), null, false, 0);
+        }
+
+        // 1. Lấy tất cả phòng của user
+        List<RoomMember> memberships = roomMemberRepository.findByUserId(UUID.fromString(userId));
+        if (memberships.isEmpty()) {
+            return new SearchMessageResponse(Collections.emptyList(), null, false, 0);
+        }
+
+        // 2. Search từng phòng (mỗi phòng tối đa 10 kết quả)
+        int perRoomLimit = 10;
+        List<MessageDynamo> allMatches = new ArrayList<>();
+
+        for (RoomMember membership : memberships) {
+            try {
+                String roomId = membership.getRoom().getId().toString();
+                SearchMessageResponse roomResult = messageDynamoRepository
+                        .searchMessages(roomId, query, perRoomLimit, null);
+                allMatches.addAll(roomResult.getMessages());
+            } catch (Exception e) {
+                log.warn("[searchMessagesGlobal] Error searching room: {}", e.getMessage());
+            }
+        }
+
+        // 3. Sắp xếp theo thời gian mới nhất và cắt theo limit
+        allMatches.sort((a, b) -> {
+            String ta = a.getCreatedAt() != null ? a.getCreatedAt() : "";
+            String tb = b.getCreatedAt() != null ? b.getCreatedAt() : "";
+            return tb.compareTo(ta);
+        });
+
+        List<MessageDynamo> paged = allMatches.size() > limit
+                ? allMatches.subList(0, limit)
+                : allMatches;
+
+        boolean hasMore = allMatches.size() > limit;
+        log.info("[searchMessagesGlobal] userId={}, query='{}', found={}", userId, query, paged.size());
+        return new SearchMessageResponse(paged, null, hasMore, paged.size());
     }
 }
