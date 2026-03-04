@@ -34,7 +34,7 @@ public class FileControllerTest {
                 MediaType.IMAGE_PNG_VALUE,
                 "dummy image content".getBytes());
 
-        String mockUrl = "/minio-bucket/files/unique_test-image.png";
+        String mockUrl = "http://localhost:9000/minio-bucket/files/unique_test-image.png";
         when(minioService.uploadFile(any(), any(), any())).thenReturn(mockUrl);
 
         mockMvc.perform(multipart("/api/files/upload").file(file))
