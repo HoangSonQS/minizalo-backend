@@ -21,6 +21,9 @@ public class MinioServiceImpl implements MinioService {
     @Value("${minio.bucketName}")
     private String bucketName;
 
+    @Value("${minio.publicUrl}")
+    private String minioPublicUrl;
+
     public MinioServiceImpl(MinioClient minioClient) {
         this.minioClient = minioClient;
     }
@@ -51,7 +54,9 @@ public class MinioServiceImpl implements MinioService {
         } catch (Exception e) {
             throw new RuntimeException("Error uploading file to MinIO: " + e.getMessage(), e);
         }
-        return "/" + bucketName + "/" + objectName;
+        // Return full public URL so the browser can load the file directly
+        String base = minioPublicUrl.replaceAll("/$", "");
+        return base + "/" + bucketName + "/" + objectName;
     }
 
     @Override
