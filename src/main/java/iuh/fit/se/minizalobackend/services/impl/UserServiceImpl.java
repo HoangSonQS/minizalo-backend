@@ -69,7 +69,7 @@ public class UserServiceImpl implements UserService {
 
         user.setDisplayName(signupRequest.getName());
         user.setPhone(signupRequest.getPhone());
-        
+
         if (signupRequest.getGender() != null) {
             user.setGender(signupRequest.getGender());
         }
@@ -144,6 +144,22 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
+    public UserProfileResponse uploadCoverPhoto(UserDetails userDetails, MultipartFile coverFile) throws IOException {
+        User user = userRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        if (!coverFile.isEmpty()) {
+            String coverUrl = minioService.uploadFile(
+                    coverFile,
+                    "covers/" + user.getId() + "/",
+                    coverFile.getOriginalFilename());
+            user.setCoverPhotoUrl(coverUrl);
+        }
+        return mapUserToUserProfileResponse(userRepository.save(user));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<UserProfileResponse> searchUsers(String query) {
         String q = query == null ? "" : query.trim();
@@ -183,6 +199,7 @@ public class UserServiceImpl implements UserService {
                 user.getEmail(),
                 user.getDisplayName(),
                 user.getAvatarUrl(),
+                user.getCoverPhotoUrl(),
                 user.getStatusMessage(),
                 user.getPhone(),
                 user.getGender(),
@@ -267,12 +284,12 @@ public class UserServiceImpl implements UserService {
     public void updateOnlineStatus(UUID userId, boolean isOnline) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        
+
         user.setIsOnline(isOnline);
         if (!isOnline) {
             user.setLastSeen(LocalDateTime.now());
         }
-        
+
         userRepository.save(user);
     }
 }

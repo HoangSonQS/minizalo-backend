@@ -22,6 +22,8 @@ public interface UserService {
 
     UserProfileResponse uploadAvatar(UserDetails userDetails, MultipartFile avatarFile) throws IOException;
 
+    UserProfileResponse uploadCoverPhoto(UserDetails userDetails, MultipartFile coverFile) throws IOException;
+
     List<UserProfileResponse> searchUsers(String query);
 
     Optional<User> getUserById(UUID id);
