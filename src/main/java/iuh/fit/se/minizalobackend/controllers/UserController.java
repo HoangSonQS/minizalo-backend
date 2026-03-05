@@ -84,6 +84,39 @@ public class UserController {
         }
     }
 
+    @PutMapping("/cover-photo")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> uploadCoverPhoto(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @RequestParam("file") MultipartFile file) {
+
+        if (file.getSize() > MAX_FILE_SIZE) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("Error: File size must not exceed " + (MAX_FILE_SIZE / (1024 * 1024)) + "MB!");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType)) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("Error: Only JPEG, PNG, and GIF image formats are allowed!");
+        }
+
+        try {
+            UserProfileResponse updatedProfile = userService.uploadCoverPhoto(userDetails, file);
+            return ResponseEntity.ok(updatedProfile);
+        } catch (IOException e) {
+            return ResponseEntity
+                    .internalServerError()
+                    .body("Error: Could not upload the cover photo due to an internal server error: " + e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity
+                    .internalServerError()
+                    .body("Error: An unexpected error occurred during cover photo upload: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/search")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
     public ResponseEntity<List<UserProfileResponse>> searchUsers(@RequestParam String q) {

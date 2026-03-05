@@ -18,6 +18,7 @@ public class UserProfileResponse {
     private String email;
     private String displayName;
     private String avatarUrl;
+    private String coverPhotoUrl;
     private String statusMessage;
     private String phone;
     private String gender;
