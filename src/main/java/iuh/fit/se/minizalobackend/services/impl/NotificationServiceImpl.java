@@ -25,7 +25,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Async
     @Transactional
-    public void sendNotification(UUID userId, String token, String title, String body) {
+    public void sendNotification(UUID userId, String token, String title, String body, String roomId, String senderName) {
         if (token == null || token.isEmpty()) {
             return;
         }
@@ -35,10 +35,19 @@ public class NotificationServiceImpl implements NotificationService {
                 .setBody(body)
                 .build();
 
-        Message message = Message.builder()
+        Message.Builder messageBuilder = Message.builder()
                 .setToken(token)
-                .setNotification(notification)
-                .build();
+                .setNotification(notification);
+
+        // Add data payload for frontend navigation on tap
+        if (roomId != null) {
+            messageBuilder.putData("roomId", roomId);
+        }
+        if (senderName != null) {
+            messageBuilder.putData("senderName", senderName);
+        }
+
+        Message message = messageBuilder.build();
 
         try {
             String response = FirebaseMessaging.getInstance().send(message);
