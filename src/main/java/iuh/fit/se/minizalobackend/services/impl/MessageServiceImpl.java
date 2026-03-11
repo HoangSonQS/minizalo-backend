@@ -204,7 +204,9 @@ public class MessageServiceImpl implements MessageService {
                                         recipientId,
                                         fcmToken,
                                         "New Message",
-                                        "You have a new message from " + message.getSenderName());
+                                        "You have a new message from " + message.getSenderName(),
+                                        message.getChatRoomId(),
+                                        message.getSenderName());
                             }
                         }
                     }
