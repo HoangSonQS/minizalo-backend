@@ -10,6 +10,10 @@ public class UserProfileUpdateRequest {
     @Size(max = 50)
     private String displayName;
     @Size(max = 255)
+    private String avatarUrl;
+    @Size(max = 255)
+    private String coverPhotoUrl;
+    @Size(max = 255)
     private String statusMessage;
     @Size(max = 20)
     private String phone;

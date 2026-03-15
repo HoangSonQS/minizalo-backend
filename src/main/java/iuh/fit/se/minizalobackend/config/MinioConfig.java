@@ -11,16 +11,27 @@ public class MinioConfig {
     @Value("${minio.endpoint}")
     private String minioEndpoint;
 
+    @Value("${minio.publicUrl}")
+    private String minioPublicUrl;
+
     @Value("${minio.accessKey}")
     private String minioAccessKey;
 
     @Value("${minio.secretKey}")
     private String minioSecretKey;
 
-    @Bean
+    @Bean(name = "internalMinioClient")
     public MinioClient generateMinioClient() {
         return MinioClient.builder()
                 .endpoint(minioEndpoint)
+                .credentials(minioAccessKey, minioSecretKey)
+                .build();
+    }
+
+    @Bean(name = "publicMinioClient")
+    public MinioClient generatePublicMinioClient() {
+        return MinioClient.builder()
+                .endpoint(minioPublicUrl)
                 .credentials(minioAccessKey, minioSecretKey)
                 .build();
     }

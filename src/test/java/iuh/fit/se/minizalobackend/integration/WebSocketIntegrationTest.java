@@ -37,8 +37,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-@Import(TestConfig.class)
 public class WebSocketIntegrationTest {
+
+    @MockBean(name = "internalMinioClient")
+    private io.minio.MinioClient minioClient;
+
+    @MockBean(name = "publicMinioClient")
+    private io.minio.MinioClient publicMinioClient;
 
     @LocalServerPort
     private int port;
