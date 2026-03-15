@@ -46,8 +46,11 @@ public class ChatIntegrationTest {
     private MessageDynamoRepository messageDynamoRepository;
 
     // Mock Minio to avoid bean creation error if Minio is required
-    @MockBean
+    @MockBean(name = "internalMinioClient")
     private io.minio.MinioClient minioClient;
+
+    @MockBean(name = "publicMinioClient")
+    private io.minio.MinioClient publicMinioClient;
 
     private String accessToken;
     private final UUID roomId = UUID.randomUUID();

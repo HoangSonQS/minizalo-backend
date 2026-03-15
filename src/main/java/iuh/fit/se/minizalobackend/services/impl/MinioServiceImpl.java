@@ -5,6 +5,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,6 +18,7 @@ import java.util.UUID;
 public class MinioServiceImpl implements MinioService {
 
     private final MinioClient minioClient;
+    private final MinioClient publicMinioClient;
 
     @Value("${minio.bucketName}")
     private String bucketName;
@@ -24,8 +26,11 @@ public class MinioServiceImpl implements MinioService {
     @Value("${minio.publicUrl}")
     private String minioPublicUrl;
 
-    public MinioServiceImpl(MinioClient minioClient) {
+    public MinioServiceImpl(
+            @Qualifier("internalMinioClient") MinioClient minioClient, 
+            @Qualifier("publicMinioClient") MinioClient publicMinioClient) {
         this.minioClient = minioClient;
+        this.publicMinioClient = publicMinioClient;
     }
 
     @PostConstruct
@@ -60,15 +65,20 @@ public class MinioServiceImpl implements MinioService {
     }
 
     @Override
-    public String getPresignedUrl(String folder, String fileName) {
+    public String getPresignedUrl(String folder, String fileName, String contentType) {
         String objectName = folder + UUID.randomUUID().toString() + "_" + fileName;
         try {
-            return minioClient.getPresignedObjectUrl(
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            headers.put("Content-Type", contentType);
+
+            // Sử dụng publicMinioClient để tạo URL với host public (đúng signature)
+            return publicMinioClient.getPresignedObjectUrl(
                     io.minio.GetPresignedObjectUrlArgs.builder()
                             .method(io.minio.http.Method.PUT)
                             .bucket(bucketName)
                             .object(objectName)
                             .expiry(60 * 15) // 15 minutes
+                            .extraHeaders(headers)
                             .build());
         } catch (Exception e) {
             throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);

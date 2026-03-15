@@ -49,8 +49,11 @@ public class AuthControllerIntegrationTest {
         @Autowired
         private UserRepository userRepository;
 
-        @MockBean
+        @MockBean(name = "internalMinioClient")
         private MinioClient minioClient;
+
+        @MockBean(name = "publicMinioClient")
+        private MinioClient publicMinioClient;
 
         private static final String AUTH_API = "/api/auth";
 
