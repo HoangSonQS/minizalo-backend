@@ -176,6 +176,9 @@ public class MessageServiceImpl implements MessageService {
         message.setReadBy(new ArrayList<>());
         message.setReactions(new ArrayList<>());
 
+        log.info("[DEBUG] ProcessMessage attachments count: {}", 
+                 message.getAttachments() != null ? message.getAttachments().size() : "null");
+
         saveMessage(message);
 
         // Broadcast to room
@@ -222,6 +225,10 @@ public class MessageServiceImpl implements MessageService {
         log.info("Fetching messages from DynamoDB for room: {}, limit: {}", roomId, limit);
         PaginatedMessageResult result = messageDynamoRepository.getMessagesByRoomId(roomId.toString(), lastKey, limit);
         log.info("Found {} messages for room {}", result.getMessages().size(), roomId);
+        if (!result.getMessages().isEmpty()) {
+             log.info("[DEBUG] History first message attachments count: {}", 
+                 result.getMessages().get(0).getAttachments() != null ? result.getMessages().get(0).getAttachments().size() : "null");
+        }
         return result;
     }
 
