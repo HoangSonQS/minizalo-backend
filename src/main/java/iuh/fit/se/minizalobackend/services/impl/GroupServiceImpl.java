@@ -253,10 +253,8 @@ public class GroupServiceImpl implements GroupService {
                 .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + request.getGroupId()));
 
         Optional<RoomMember> initiatorMembership = roomMemberRepository.findByRoomAndUser(groupChatRoom, initiator);
-        if (initiatorMembership.isEmpty() ||
-                !(initiatorMembership.get().getRole() == ERoomRole.ADMIN
-                        || groupChatRoom.getCreatedBy().getId().equals(initiator.getId()))) {
-            throw new IllegalArgumentException("Only group owner or admins can update group information.");
+        if (initiatorMembership.isEmpty()) {
+            throw new IllegalArgumentException("Only group members can update group information.");
         }
 
         boolean changed = false;
@@ -371,6 +369,7 @@ public class GroupServiceImpl implements GroupService {
     private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers) {
         GroupResponse response = modelMapper.map(chatRoom, GroupResponse.class);
         response.setId(chatRoom.getId().toString());
+        response.setGroupName(chatRoom.getName());
         response.setOwnerId(chatRoom.getCreatedBy().getId().toString());
 
         List<GroupMemberResponse> memberResponses = roomMembers.stream()
@@ -378,6 +377,7 @@ public class GroupServiceImpl implements GroupService {
                     GroupMemberResponse memberDto = modelMapper.map(roomMember.getUser(), GroupMemberResponse.class);
                     memberDto.setUserId(roomMember.getUser().getId().toString());
                     memberDto.setUsername(roomMember.getUser().getUsername());
+                    memberDto.setDisplayName(roomMember.getUser().getDisplayName());
                     memberDto.setAvatarUrl(roomMember.getUser().getAvatarUrl());
                     memberDto.setRole(roomMember.getRole());
                     return memberDto;
@@ -401,5 +401,42 @@ public class GroupServiceImpl implements GroupService {
 
         String destination = "/topic/group/" + groupChatRoom.getId().toString() + "/events";
         messagingTemplate.convertAndSend(destination, eventMessage);
+    }
+
+    @Override
+    @Transactional
+    public GroupResponse changeMemberRole(UUID groupId, UUID targetUserId, ERoomRole newRole, User initiator) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        // Only the owner (creator) can change roles
+        if (!groupChatRoom.getCreatedBy().getId().equals(initiator.getId())) {
+            throw new IllegalArgumentException("Only the group owner can change member roles.");
+        }
+
+        // Cannot change the owner's own role
+        if (targetUserId.equals(initiator.getId())) {
+            throw new IllegalArgumentException("Cannot change the group owner's role.");
+        }
+
+        RoomMember targetMember = roomMemberRepository.findByRoomAndUser_Id(groupChatRoom, targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found in group."));
+
+        ERoomRole oldRole = targetMember.getRole();
+        targetMember.setRole(newRole);
+        roomMemberRepository.save(targetMember);
+
+        groupChatRoom.setUpdatedAt(LocalDateTime.now());
+        groupRepository.save(groupChatRoom);
+
+        // Publish MEMBER_ROLE_CHANGED event
+        String roleLabel = newRole == ERoomRole.ADMIN ? "phó nhóm" : "thành viên";
+        publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ROLE_CHANGED,
+                initiator.getUsername() + " đã thay đổi quyền của " + targetMember.getUser().getUsername()
+                        + " thành " + roleLabel + ".",
+                targetMember.getUser());
+
+        List<RoomMember> members = roomMemberRepository.findAllByRoom(groupChatRoom);
+        return buildGroupResponse(groupChatRoom, members);
     }
 }

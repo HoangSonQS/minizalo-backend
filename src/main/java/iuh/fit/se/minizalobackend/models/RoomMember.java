@@ -43,4 +43,7 @@ public class RoomMember {
 
     @Column(name = "mute_until")
     private LocalDateTime muteUntil;
+
+    @Column(name = "nickname", length = 100)
+    private String nickname; // Per-user custom name for this room's partner/group
 }
