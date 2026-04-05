@@ -6,6 +6,7 @@ public class AppConstants {
     public static final String MESSAGE_TYPE_VIDEO = "VIDEO";
     public static final String MESSAGE_TYPE_DOCUMENT = "DOCUMENT";
     public static final String MESSAGE_TYPE_FILE = "FILE";
+    public static final String MESSAGE_TYPE_SYSTEM = "SYSTEM";
 
     public static final String ACTIVITY_MESSAGE_SENT = "MESSAGE_SENT";
     public static final String ACTIVITY_MESSAGE_FORWARDED = "MESSAGE_FORWARDED";
