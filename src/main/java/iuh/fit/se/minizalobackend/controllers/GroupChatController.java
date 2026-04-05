@@ -162,6 +162,8 @@ public class GroupChatController {
                                 request.getRole(),
                                 initiator);
                 return ResponseEntity.ok(updatedGroup);
+        }
+
         @DeleteMapping("/{groupId}")
         public ResponseEntity<MessageResponse> disbandGroup(
                         @PathVariable UUID groupId,
