@@ -93,10 +93,12 @@ public class SecurityConfig {
                                 "/api/auth/refreshtoken", "/api/auth/refreshtoken/**",
                                 "/api/auth/send-otp", "/api/auth/verify-otp",
                                 "/api/auth/forgot-password/send-otp", "/api/auth/reset-password",
+                                "/api/auth/qr-login/generate", "/api/auth/qr-login/status/**",
                                 "/v3/api-docs/**", "/ws/**", "/ws-raw", "/ws-raw/**",
                                 "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
                         .permitAll()
                         .requestMatchers("/api/auth/logout", "/api/auth/logout/**").authenticated()
+                        .requestMatchers("/api/auth/qr-login/confirm").authenticated()
                         .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());
