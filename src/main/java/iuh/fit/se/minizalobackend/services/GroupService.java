@@ -32,4 +32,6 @@ public interface GroupService {
     MessageResponse disbandGroup(UUID groupId, User initiator);
 
     List<iuh.fit.se.minizalobackend.dtos.response.GroupEventResponse> getGroupEvents(UUID groupId, User viewer);
+
+    GroupResponse changeMemberRole(UUID groupId, UUID targetUserId, iuh.fit.se.minizalobackend.models.ERoomRole newRole, User initiator);
 }

@@ -149,6 +149,21 @@ public class GroupChatController {
                 return ResponseEntity.ok(groupService.getGroupEvents(groupId, currentUser));
         }
 
+        @PutMapping("/members/role")
+        public ResponseEntity<GroupResponse> changeMemberRole(
+                        @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.UpdateMemberRoleRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User initiator = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                GroupResponse updatedGroup = groupService.changeMemberRole(
+                                request.getGroupId(),
+                                request.getTargetUserId(),
+                                request.getRole(),
+                                initiator);
+                return ResponseEntity.ok(updatedGroup);
+        }
+
         @DeleteMapping("/{groupId}")
         public ResponseEntity<MessageResponse> disbandGroup(
                         @PathVariable UUID groupId,

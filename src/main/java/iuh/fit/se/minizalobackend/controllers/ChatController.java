@@ -216,4 +216,23 @@ public class ChatController {
         log.info("Global search messages, userId={}, query='{}', limit={}", userId, q, limit);
         return ResponseEntity.ok(messageService.searchMessagesGlobal(userId, q, limit));
     }
+
+    /**
+     * Lưu tên gợi nhớ (nickname) cho 1 phòng chat — chỉ hiển thị với user đặt.
+     * PUT /api/chat/rooms/{roomId}/nickname
+     * Body: { "nickname": "Tên mới" }
+     */
+    @PutMapping("/api/chat/rooms/{roomId}/nickname")
+    public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse> saveNickname(
+            @PathVariable UUID roomId,
+            @RequestBody Map<String, String> body,
+            Principal principal) {
+        String userId = getUserIdFromPrincipal(principal);
+        User actor = userService.getUserById(UUID.fromString(userId))
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        String nickname = body.getOrDefault("nickname", "");
+        iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse updated =
+                chatRoomService.saveNickname(roomId, nickname, actor);
+        return ResponseEntity.ok(updated);
+    }
 }

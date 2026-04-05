@@ -460,13 +460,24 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 log.info("Got details for room {}", room.getId());
 
                 if (room.getType() == ERoomType.DIRECT) {
-                    response.getMembers().stream()
-                        .filter(m -> !m.getUser().getId().equals(user.getId()))
-                        .findFirst()
-                        .ifPresent(otherMember -> {
-                            response.setName(otherMember.getUser().getDisplayName());
-                            response.setAvatarUrl(otherMember.getUser().getAvatarUrl());
-                        });
+                    // Prefer user's saved nickname, fall back to partner's displayName
+                    final String actorNickname = membership.getNickname();
+                    if (actorNickname != null && !actorNickname.isBlank()) {
+                        response.setName(actorNickname);
+                        // Still set avatarUrl from the partner
+                        response.getMembers().stream()
+                            .filter(m -> !m.getUser().getId().equals(user.getId()))
+                            .findFirst()
+                            .ifPresent(otherMember -> response.setAvatarUrl(otherMember.getUser().getAvatarUrl()));
+                    } else {
+                        response.getMembers().stream()
+                            .filter(m -> !m.getUser().getId().equals(user.getId()))
+                            .findFirst()
+                            .ifPresent(otherMember -> {
+                                response.setName(otherMember.getUser().getDisplayName());
+                                response.setAvatarUrl(otherMember.getUser().getAvatarUrl());
+                            });
+                    }
                 }
 
                 // Fetch last message from DynamoDB
@@ -515,5 +526,37 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .joinedAt(roomMember.getJoinedAt())
                 .lastReadAt(roomMember.getLastReadAt())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomResponse saveNickname(UUID roomId, String nickname, User actor) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new ChatRoomNotFoundException("Room with ID " + roomId + " not found."));
+
+        RoomMember membership = roomMemberRepository.findByRoomAndUser(room, actor)
+                .orElseThrow(() -> new UnauthorizedRoomAccessException("You are not a member of this room."));
+
+        // Store empty string as null (clear nickname)
+        membership.setNickname((nickname != null && !nickname.isBlank()) ? nickname.trim() : null);
+        roomMemberRepository.save(membership);
+
+        // Build response with nickname as room name for DIRECT rooms
+        ChatRoomResponse response = getGroupChatDetails(roomId);
+        if (room.getType() == ERoomType.DIRECT) {
+            if (membership.getNickname() != null) {
+                response.setName(membership.getNickname());
+            } else {
+                // Fall back to partner's displayName
+                response.getMembers().stream()
+                        .filter(m -> !m.getUser().getId().equals(actor.getId()))
+                        .findFirst()
+                        .ifPresent(other -> {
+                            response.setName(other.getUser().getDisplayName());
+                            response.setAvatarUrl(other.getUser().getAvatarUrl());
+                        });
+            }
+        }
+        return response;
     }
 }

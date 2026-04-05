@@ -13,6 +13,7 @@ import lombok.Setter;
 public class GroupMemberResponse {
     private String userId;
     private String username;
+    private String displayName;
     private String avatarUrl;
     private ERoomRole role; // ADMIN, MEMBER
 }

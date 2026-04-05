@@ -25,4 +25,7 @@ public interface ChatRoomService {
     ChatRoomResponse createDirectChat(User user1, User user2);
 
     java.util.List<ChatRoomResponse> getChatRoomsForUser(User user);
+
+    /** Save per-user nickname for a room (used in 1-1 "đặt tên gợi nhớ"). Returns updated room. */
+    ChatRoomResponse saveNickname(UUID roomId, String nickname, User actor);
 }
