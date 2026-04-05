@@ -9,9 +9,14 @@ import org.springframework.context.annotation.Primary;
 @TestConfiguration
 public class TestConfig {
 
-    @Bean
+    @Bean(name = "internalMinioClient")
     @Primary
-    public MinioClient minioClient() {
+    public MinioClient internalMinioClient() {
+        return Mockito.mock(MinioClient.class);
+    }
+
+    @Bean(name = "publicMinioClient")
+    public MinioClient publicMinioClient() {
         return Mockito.mock(MinioClient.class);
     }
 }

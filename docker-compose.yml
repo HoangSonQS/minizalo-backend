@@ -57,7 +57,8 @@ services:
       /bin/sh -c "
       until /usr/bin/mc alias set myminio http://minio:9000 \"$$MINIO_ACCESS_KEY\" \"$$MINIO_SECRET_KEY\"; do echo 'Waiting...'; sleep 1; done;
       /usr/bin/mc mb myminio/\"$$MINIO_BUCKET_NAME\" || true;
-      /usr/bin/mc anonymous set public myminio/\"$$MINIO_BUCKET_NAME\";
+      /usr/bin/mc anonymous set download myminio/\"$$MINIO_BUCKET_NAME\";
+      echo 'Storage Policy: PUBLIC READ-ONLY ENABLED';
       "
     env_file:
       - ./.env
@@ -99,7 +100,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_PUBLIC_URL=http://localhost:9000
+      - MINIO_PUBLIC_URL=http://192.168.0.200:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}

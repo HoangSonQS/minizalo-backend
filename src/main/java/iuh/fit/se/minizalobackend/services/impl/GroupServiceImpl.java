@@ -140,10 +140,35 @@ public class GroupServiceImpl implements GroupService {
         groupChatRoom.setUpdatedAt(LocalDateTime.now());
         groupRepository.save(groupChatRoom);
 
-        // Publish MEMBER_ADDED events
+        // Publish MEMBER_ADDED events and SYSTEM message
         for (RoomMember member : newMembers) {
+            String initiatorName = initiator.getDisplayName() != null && !initiator.getDisplayName().trim().isEmpty() ? initiator.getDisplayName() : initiator.getUsername();
+            String memberName = member.getUser().getDisplayName() != null && !member.getUser().getDisplayName().trim().isEmpty() ? member.getUser().getDisplayName() : member.getUser().getUsername();
+            String sysMsg = initiatorName + " đã thêm " + memberName + " vào nhóm.";
+
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(groupChatRoom.getId().toString());
+            message.setSenderId(initiator.getId().toString());
+            message.setSenderName(initiatorName);
+            message.setContent(sysMsg);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo savedMessage = messageService.saveMessage(message);
+
+            GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                    .messageId(savedMessage.getMessageId())
+                    .groupId(groupChatRoom.getId().toString())
+                    .senderId(initiator.getId().toString())
+                    .senderUsername(initiatorName)
+                    .content(sysMsg)
+                    .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                    .timestamp(savedMessage.getCreatedAt())
+                    .isRecalled(false)
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), groupChatMessage);
+
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ADDED,
-                    initiator.getUsername() + " added " + member.getUser().getUsername() + " to the group.",
+                    sysMsg,
                     member.getUser());
         }
 
@@ -171,10 +196,35 @@ public class GroupServiceImpl implements GroupService {
         groupChatRoom.setUpdatedAt(LocalDateTime.now());
         groupRepository.save(groupChatRoom);
 
-        // Publish MEMBER_REMOVED events
+        // Publish MEMBER_REMOVED events and SYSTEM message
         for (RoomMember member : membersToRemove) {
+            String initiatorName = initiator.getDisplayName() != null && !initiator.getDisplayName().trim().isEmpty() ? initiator.getDisplayName() : initiator.getUsername();
+            String memberName = member.getUser().getDisplayName() != null && !member.getUser().getDisplayName().trim().isEmpty() ? member.getUser().getDisplayName() : member.getUser().getUsername();
+            String sysMsg = initiatorName + " đã xóa " + memberName + " khỏi nhóm.";
+            
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(groupChatRoom.getId().toString());
+            message.setSenderId(initiator.getId().toString());
+            message.setSenderName(initiatorName);
+            message.setContent(sysMsg);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo savedMessage = messageService.saveMessage(message);
+
+            GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                    .messageId(savedMessage.getMessageId())
+                    .groupId(groupChatRoom.getId().toString())
+                    .senderId(initiator.getId().toString())
+                    .senderUsername(initiatorName)
+                    .content(sysMsg)
+                    .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                    .timestamp(savedMessage.getCreatedAt())
+                    .isRecalled(false)
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), groupChatMessage);
+
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_REMOVED,
-                    initiator.getUsername() + " removed " + member.getUser().getUsername() + " from the group.",
+                    sysMsg,
                     member.getUser());
         }
 
@@ -238,6 +288,7 @@ public class GroupServiceImpl implements GroupService {
                 .senderId(sender.getId().toString())
                 .senderUsername(sender.getUsername())
                 .content(savedMessage.getContent())
+                .type(savedMessage.getType())
                 .timestamp(savedMessage.getCreatedAt())
                 .isRecalled(false)
                 .build();
@@ -312,8 +363,33 @@ public class GroupServiceImpl implements GroupService {
             publishGroupEvent(groupChatRoom, ERoomEventType.ROOM_DELETED, responseMessage, user);
         } else {
             responseMessage = "Successfully left group '" + groupChatRoom.getName() + "'.";
+            String userName = user.getDisplayName() != null && !user.getDisplayName().trim().isEmpty() ? user.getDisplayName() : user.getUsername();
+            String sysMsg = userName + " đã rời nhóm.";
+            
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(groupChatRoom.getId().toString());
+            message.setSenderId(user.getId().toString());
+            message.setSenderName(userName);
+            message.setContent(sysMsg);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo savedMessage = messageService.saveMessage(message);
+
+            GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                    .messageId(savedMessage.getMessageId())
+                    .groupId(groupChatRoom.getId().toString())
+                    .senderId(user.getId().toString())
+                    .senderUsername(userName)
+                    .content(sysMsg)
+                    .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                    .timestamp(savedMessage.getCreatedAt())
+                    .isRecalled(false)
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), groupChatMessage);
+
             publishGroupEvent(groupChatRoom, ERoomEventType.ROOM_LEFT,
-                    user.getUsername() + " has left the group.", user);
+                    sysMsg,
+                    user);
             groupChatRoom.setUpdatedAt(LocalDateTime.now());
             groupRepository.save(groupChatRoom);
         }
@@ -364,6 +440,26 @@ public class GroupServiceImpl implements GroupService {
                 .createdAt(event.getCreatedAt())
                 .build())
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public MessageResponse disbandGroup(UUID groupId, User initiator) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        if (!groupChatRoom.getCreatedBy().getId().equals(initiator.getId())) {
+            throw new IllegalArgumentException("Only the group owner can disband the group.");
+        }
+
+        publishGroupEvent(groupChatRoom, ERoomEventType.ROOM_DELETED,
+                "Group '" + groupChatRoom.getName() + "' has been disbanded by the owner.", initiator);
+
+        roomMemberRepository.deleteAll(roomMemberRepository.findAllByRoom(groupChatRoom));
+        groupEventRepository.deleteAll(groupEventRepository.findByGroupIdOrderByCreatedAtDesc(groupId));
+        groupRepository.delete(groupChatRoom);
+
+        return new MessageResponse("Group disbanded successfully.");
     }
 
     private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers) {

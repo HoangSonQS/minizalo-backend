@@ -162,5 +162,14 @@ public class GroupChatController {
                                 request.getRole(),
                                 initiator);
                 return ResponseEntity.ok(updatedGroup);
+        @DeleteMapping("/{groupId}")
+        public ResponseEntity<MessageResponse> disbandGroup(
+                        @PathVariable UUID groupId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                MessageResponse response = groupService.disbandGroup(groupId, currentUser);
+                return ResponseEntity.ok(response);
         }
 }

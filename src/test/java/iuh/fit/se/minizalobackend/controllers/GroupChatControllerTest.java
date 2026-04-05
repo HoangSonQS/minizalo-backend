@@ -52,8 +52,11 @@ public class GroupChatControllerTest {
         @MockBean
         private UserService userService;
 
-        @MockBean
+        @MockBean(name = "internalMinioClient")
         private MinioClient minioClient;
+
+        @MockBean(name = "publicMinioClient")
+        private MinioClient publicMinioClient;
 
         private UserDetailsImpl userDetails;
         private User testUser;

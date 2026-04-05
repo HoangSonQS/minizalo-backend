@@ -44,8 +44,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestConfig.class)
 public class UserJourneyIntegrationTest {
+
+        @MockBean(name = "internalMinioClient")
+        private io.minio.MinioClient minioClient;
+
+        @MockBean(name = "publicMinioClient")
+        private io.minio.MinioClient publicMinioClient;
 
         @LocalServerPort
         private int port;

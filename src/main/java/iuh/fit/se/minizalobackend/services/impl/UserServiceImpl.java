@@ -108,6 +108,12 @@ public class UserServiceImpl implements UserService {
         if (request.getDisplayName() != null && !request.getDisplayName().isEmpty()) {
             user.setDisplayName(request.getDisplayName());
         }
+        if (request.getAvatarUrl() != null && !request.getAvatarUrl().isEmpty()) {
+            user.setAvatarUrl(request.getAvatarUrl());
+        }
+        if (request.getCoverPhotoUrl() != null && !request.getCoverPhotoUrl().isEmpty()) {
+            user.setCoverPhotoUrl(request.getCoverPhotoUrl());
+        }
         if (request.getStatusMessage() != null) {
             user.setStatusMessage(request.getStatusMessage());
         }
