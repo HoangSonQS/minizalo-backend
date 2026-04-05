@@ -91,6 +91,8 @@ public class SecurityConfig {
                                 "/api/auth/signin", "/api/auth/signin/**",
                                 "/api/auth/signup", "/api/auth/signup/**",
                                 "/api/auth/refreshtoken", "/api/auth/refreshtoken/**",
+                                "/api/auth/send-otp", "/api/auth/verify-otp",
+                                "/api/auth/forgot-password/send-otp", "/api/auth/reset-password",
                                 "/v3/api-docs/**", "/ws/**", "/ws-raw", "/ws-raw/**",
                                 "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
                         .permitAll()

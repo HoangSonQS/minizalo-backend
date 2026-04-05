@@ -7,6 +7,7 @@ import iuh.fit.se.minizalobackend.payload.request.LoginRequest;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
+import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,9 @@ public class UserIntegrationTest {
         private UserRepository userRepository;
 
         @Autowired
+        private JwtTokenProvider jwtTokenProvider;
+
+        @Autowired
         private GroupRepository groupRepository;
 
         @Autowired
@@ -79,7 +83,8 @@ public class UserIntegrationTest {
                 String uniquePhone = String.format("0987%06d", timestamp); // Always 10 digits: 0987 + 6 digits
                 String uniqueEmail = "test" + timestamp + "@example.com";
 
-                SignupRequest signupRequest = new SignupRequest("Test User", uniquePhone, uniqueEmail, "Password@123", null, null);
+                String verToken = jwtTokenProvider.generateVerificationToken(uniquePhone);
+                SignupRequest signupRequest = new SignupRequest("Test User", uniquePhone, uniqueEmail, "Password@123", null, null, verToken);
                 mockMvc.perform(post("/api/auth/signup")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(signupRequest)))

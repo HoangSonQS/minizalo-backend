@@ -10,10 +10,14 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChangePasswordRequest {
+public class ResetPasswordRequest {
 
-    @NotBlank(message = "Mật khẩu cũ không được để trống")
-    private String oldPassword;
+    @NotBlank(message = "Số điện thoại không được để trống")
+    @Pattern(regexp = "^(03|05|07|08|09)[0-9]{8}$", message = "Số điện thoại không hợp lệ")
+    private String phone;
+
+    @NotBlank(message = "Mã OTP không được để trống")
+    private String otp;
 
     @NotBlank(message = "Mật khẩu mới không được để trống")
     @Size(min = 6, max = 32, message = "Mật khẩu phải từ 6-32 ký tự")

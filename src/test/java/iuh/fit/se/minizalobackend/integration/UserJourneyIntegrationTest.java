@@ -8,6 +8,7 @@ import iuh.fit.se.minizalobackend.payload.request.LoginRequest;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
@@ -64,6 +65,9 @@ public class UserJourneyIntegrationTest {
         @Autowired
         private UserRepository userRepository;
 
+        @Autowired
+        private JwtTokenProvider jwtTokenProvider;
+
         @MockBean
         private MessageDynamoRepository messageDynamoRepository;
 
@@ -98,9 +102,10 @@ public class UserJourneyIntegrationTest {
         @Test
         void testFullUserJourney() throws Exception {
                 // --- STEP 1: REGISTER ---
-                String phone = "0123456789";
+                String phone = "0312345678";
+                String verToken = jwtTokenProvider.generateVerificationToken(phone);
                 SignupRequest signupRequest = new SignupRequest("Journey User", phone, "journey@example.com",
-                                "Password@123", null, null);
+                                "Password@123", null, null, verToken);
 
                 mockMvc.perform(post("/api/auth/signup")
                                 .contentType(MediaType.APPLICATION_JSON)

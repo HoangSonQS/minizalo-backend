@@ -59,6 +59,24 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    public String generateVerificationToken(String phone) {
+        return Jwts.builder()
+                .setSubject(phone)
+                .claim("purpose", "phone_verification")
+                .setIssuedAt(new Date())
+                .setExpiration(Date.from(Instant.now().plus(5, ChronoUnit.MINUTES)))
+                .signWith(key, SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    public String getPhoneFromVerificationToken(String token) {
+        Claims claims = getClaimsFromToken(token);
+        if (!"phone_verification".equals(claims.get("purpose", String.class))) {
+            throw new IllegalArgumentException("Invalid verification token");
+        }
+        return claims.getSubject();
+    }
+
     public String getUserIdFromAccessToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(key)

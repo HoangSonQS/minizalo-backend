@@ -37,4 +37,6 @@ public interface UserService {
     void muteConversation(UUID userId, iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request);
 
     void updateOnlineStatus(UUID userId, boolean isOnline);
+
+    void resetPassword(String phone, String newPassword);
 }

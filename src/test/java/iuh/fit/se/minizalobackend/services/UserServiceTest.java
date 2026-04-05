@@ -6,6 +6,7 @@ import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
 import iuh.fit.se.minizalobackend.services.impl.UserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ class UserServiceTest {
     private iuh.fit.se.minizalobackend.repository.GroupRepository groupRepository;
     @Mock
     private iuh.fit.se.minizalobackend.repository.RoomMemberRepository roomMemberRepository;
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
 
     @InjectMocks
     private UserServiceImpl userServiceImpl;
@@ -46,8 +49,9 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Success_UserRole() {
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null);
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null, "valid-token");
 
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
         when(passwordEncoder.encode(signupRequest.getPassword())).thenReturn("encodedPassword");
@@ -70,8 +74,9 @@ class UserServiceTest {
     @Test
     void registerNewUser_Failure_UsernameAlreadyExists() {
         SignupRequest signupRequest = new SignupRequest("Existing User", "0987654321", "test@example.com",
-                "password123", null, null);
+                "password123", null, null, "valid-token");
 
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -88,7 +93,9 @@ class UserServiceTest {
     @Test
     void registerNewUser_Failure_EmailAlreadyExists() {
         SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "existing@example.com",
-                "password123", null, null);
+                "password123", null, null, "valid-token");
+
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
 
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(true);
@@ -106,8 +113,9 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Failure_RoleNotFound() {
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null);
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null, "valid-token");
 
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
         when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
         when(roleRepository.findByName(ERole.ROLE_USER)).thenReturn(Optional.empty());
