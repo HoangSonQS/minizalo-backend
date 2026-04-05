@@ -45,12 +45,27 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roleRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final GroupRepository groupRepository;
+    private final iuh.fit.se.minizalobackend.security.JwtTokenProvider jwtTokenProvider;
 
     @Override
     @Transactional
     public void registerNewUser(SignupRequest signupRequest) {
         long startTime = System.nanoTime();
         log.debug("Starting registration for user: {}", signupRequest.getPhone());
+
+        // Verify the verification token
+        if (signupRequest.getVerificationToken() == null || signupRequest.getVerificationToken().isBlank()) {
+            throw new IllegalArgumentException("Phone verification is required");
+        }
+        try {
+            String verifiedPhone = jwtTokenProvider.getPhoneFromVerificationToken(signupRequest.getVerificationToken());
+            if (!verifiedPhone.equals(signupRequest.getPhone())) {
+                throw new IllegalArgumentException("Verification token does not match the provided phone number");
+            }
+        } catch (Exception e) {
+            if (e instanceof IllegalArgumentException) throw e;
+            throw new IllegalArgumentException("Invalid or expired verification token");
+        }
 
         // Use phone as the unique username
         if (userRepository.existsByUsername(signupRequest.getPhone())) {
@@ -297,5 +312,15 @@ public class UserServiceImpl implements UserService {
         }
 
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(String phone, String newPassword) {
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with phone: " + phone));
+        user.setPassword(encoder.encode(newPassword));
+        userRepository.save(user);
+        log.info("Password reset successfully for phone: {}", phone);
     }
 }

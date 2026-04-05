@@ -1,6 +1,9 @@
 package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest;
+import iuh.fit.se.minizalobackend.dtos.request.ResetPasswordRequest;
+import iuh.fit.se.minizalobackend.dtos.request.SendOtpRequest;
+import iuh.fit.se.minizalobackend.dtos.request.VerifyOtpRequest;
 import iuh.fit.se.minizalobackend.exception.TokenRefreshException;
 import iuh.fit.se.minizalobackend.models.RefreshToken;
 import iuh.fit.se.minizalobackend.payload.request.LoginRequest;
@@ -10,6 +13,7 @@ import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.payload.response.TokenRefreshResponse;
 import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
+import iuh.fit.se.minizalobackend.services.OtpService;
 import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.UserService;
@@ -22,6 +26,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -30,13 +36,15 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final UserService userService;
+    private final OtpService otpService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
-            RefreshTokenService refreshTokenService, UserService userService) {
+            RefreshTokenService refreshTokenService, UserService userService, OtpService otpService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
         this.userService = userService;
+        this.otpService = otpService;
     }
 
     @PostMapping("/signin")
@@ -92,5 +100,42 @@ public class AuthController {
             @AuthenticationPrincipal UserDetailsImpl userDetails) {
         userService.changePassword(userDetails.getId(), request);
         return ResponseEntity.ok(new MessageResponse("Password changed successfully!"));
+    }
+
+    @PostMapping("/send-otp")
+    public ResponseEntity<?> sendOtp(@Valid @RequestBody SendOtpRequest request) {
+        otpService.generateOtp(request.getPhone());
+        return ResponseEntity.ok(new MessageResponse("OTP sent successfully!"));
+    }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        boolean valid = otpService.verifyOtp(request.getPhone(), request.getOtp());
+        if (!valid) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Invalid or expired OTP"));
+        }
+        otpService.invalidate(request.getPhone());
+        String verificationToken = jwtTokenProvider.generateVerificationToken(request.getPhone());
+        return ResponseEntity.ok(Map.of("verificationToken", verificationToken, "message", "OTP verified successfully!"));
+    }
+
+    @PostMapping("/forgot-password/send-otp")
+    public ResponseEntity<?> forgotPasswordSendOtp(@Valid @RequestBody SendOtpRequest request) {
+        otpService.generateOtp(request.getPhone());
+        return ResponseEntity.ok(new MessageResponse("OTP sent successfully!"));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Passwords do not match"));
+        }
+        boolean valid = otpService.verifyOtp(request.getPhone(), request.getOtp());
+        if (!valid) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Invalid or expired OTP"));
+        }
+        otpService.invalidate(request.getPhone());
+        userService.resetPassword(request.getPhone(), request.getNewPassword());
+        return ResponseEntity.ok(new MessageResponse("Password reset successfully!"));
     }
 }
