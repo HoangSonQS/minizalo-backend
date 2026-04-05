@@ -164,6 +164,9 @@ public class ChatController {
     }
 
     private String getUserIdFromPrincipal(Principal principal) {
+        if (principal == null) {
+            throw new IllegalStateException("WebSocket session not authenticated – JWT may be expired or missing");
+        }
         if (principal instanceof org.springframework.security.authentication.UsernamePasswordAuthenticationToken) {
             Object p = ((org.springframework.security.authentication.UsernamePasswordAuthenticationToken) principal)
                     .getPrincipal();
