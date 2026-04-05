@@ -15,6 +15,7 @@ public class GroupChatMessage {
     private String senderId;
     private String senderUsername;
     private String content;
+    private String type;
     private String timestamp;
     private boolean isRecalled;
 }

@@ -29,5 +29,7 @@ public interface GroupService {
 
     void markAsRead(UUID groupId, User user);
 
+    MessageResponse disbandGroup(UUID groupId, User initiator);
+
     List<iuh.fit.se.minizalobackend.dtos.response.GroupEventResponse> getGroupEvents(UUID groupId, User viewer);
 }
