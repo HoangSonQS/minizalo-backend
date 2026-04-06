@@ -38,14 +38,6 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         var user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId));
 
-        // Bỏ tham chiếu refresh token cũ trên User (tránh xung đột quan hệ OneToOne)
-        user.setRefreshToken(null);
-        userRepository.saveAndFlush(user);
-
-        // Xóa refresh token cũ theo user_id (native query) để chắc chắn không còn bản ghi trước khi INSERT
-        refreshTokenRepository.deleteByUserId(user.getId());
-        refreshTokenRepository.flush();
-
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(user);
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));
@@ -69,11 +61,6 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RefreshToken rotateRefreshToken(RefreshToken oldToken) {
-        userRepository.findById(oldToken.getUser().getId()).ifPresent(user -> {
-            user.setRefreshToken(null);
-            userRepository.save(user);
-        });
-
         refreshTokenRepository.deleteById(oldToken.getId());
         refreshTokenRepository.flush();
         return createRefreshToken(oldToken.getUser().getId().toString());
@@ -86,5 +73,13 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             refreshTokenRepository.deleteByUser(user);
             refreshTokenRepository.flush(); // Ensure deletion is committed
         });
+    }
+
+    @Override
+    @Transactional
+    public void deleteByToken(String token) {
+        if (token == null || token.isBlank()) return;
+        refreshTokenRepository.deleteByToken(token);
+        refreshTokenRepository.flush();
     }
 }

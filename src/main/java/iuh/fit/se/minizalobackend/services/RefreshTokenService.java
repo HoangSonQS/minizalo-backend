@@ -14,4 +14,6 @@ public interface RefreshTokenService {
     RefreshToken rotateRefreshToken(RefreshToken oldToken);
 
     void deleteByUserId(String userId);
+
+    void deleteByToken(String token);
 }
