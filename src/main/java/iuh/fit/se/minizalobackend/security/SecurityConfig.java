@@ -99,6 +99,7 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/auth/qr-login/confirm").authenticated()
                         .requestMatchers("/api/auth/logout", "/api/auth/logout/**").authenticated()
+                        .requestMatchers("/api/auth/qr-login/confirm").authenticated()
                         .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());

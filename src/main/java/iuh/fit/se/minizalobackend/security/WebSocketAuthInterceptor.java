@@ -38,7 +38,11 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities());
                     accessor.setUser(authentication);
+                } else {
+                    throw new org.springframework.messaging.MessageDeliveryException("Invalid or expired JWT token");
                 }
+            } else {
+                throw new org.springframework.messaging.MessageDeliveryException("Missing Authorization header");
             }
         }
         return message;

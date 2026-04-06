@@ -140,8 +140,39 @@ public class AuthController {
             return ResponseEntity.badRequest().body(new MessageResponse("Invalid or expired OTP"));
         }
         otpService.invalidate(request.getPhone());
-        userService.resetPassword(request.getPhone(), request.getNewPassword());
-        return ResponseEntity.ok(new MessageResponse("Password reset successfully!"));
+        
+        try {
+            userService.resetPassword(request.getPhone(), request.getNewPassword());
+            return ResponseEntity.ok(new MessageResponse("Password reset successfully!"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @GetMapping("/qr-login/generate")
+    public ResponseEntity<?> generateQrSession() {
+        return ResponseEntity.ok(qrLoginService.generateSession());
+    }
+
+    @GetMapping("/qr-login/status/{sessionId}")
+    public ResponseEntity<?> getQrSessionStatus(@PathVariable String sessionId) {
+        return ResponseEntity.ok(qrLoginService.getSessionStatus(sessionId));
+    }
+
+    @PostMapping("/qr-login/confirm")
+    public ResponseEntity<?> confirmQrLogin(
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal UserDetailsImpl userDetails) {
+        String sessionId = body.get("sessionId");
+        if (sessionId == null || sessionId.isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("sessionId is required"));
+        }
+        try {
+            qrLoginService.confirmSession(sessionId, userDetails.getId().toString());
+            return ResponseEntity.ok(new MessageResponse("QR login confirmed"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
     }
 
     @GetMapping("/qr-login/generate")
