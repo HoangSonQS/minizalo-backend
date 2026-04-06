@@ -7,6 +7,7 @@ import iuh.fit.se.minizalobackend.dtos.request.VerifyOtpRequest;
 import iuh.fit.se.minizalobackend.exception.TokenRefreshException;
 import iuh.fit.se.minizalobackend.models.RefreshToken;
 import iuh.fit.se.minizalobackend.payload.request.LoginRequest;
+import iuh.fit.se.minizalobackend.payload.request.LogoutRequest;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.payload.request.TokenRefreshRequest;
 import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
@@ -18,9 +19,9 @@ import iuh.fit.se.minizalobackend.services.QrLoginService;
 import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.UserService;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -63,8 +64,21 @@ public class AuthController {
         // Update online status
         userService.updateOnlineStatus(userDetails.getId(), true);
 
-        String jwt = jwtTokenProvider.generateAccessToken(userDetails.getId().toString());
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId().toString());
+        String deviceType = (loginRequest.getDeviceType() == null || loginRequest.getDeviceType().isBlank())
+                ? "WEB"
+                : loginRequest.getDeviceType().trim().toUpperCase();
+        String deviceId = (loginRequest.getDeviceId() == null || loginRequest.getDeviceId().isBlank())
+                ? "unknown"
+                : loginRequest.getDeviceId().trim();
+
+        // Enforce: only 1 session per deviceType (WEB or MOBILE).
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(
+                userDetails.getId().toString(),
+                deviceType,
+                deviceId,
+                true
+        );
+        String jwt = jwtTokenProvider.generateAccessToken(userDetails.getId().toString(), refreshToken.getToken(), deviceType);
 
         return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken()));
     }
@@ -83,8 +97,11 @@ public class AuthController {
                 .map(refreshTokenService::verifyExpiration)
                 .map(refreshTokenService::rotateRefreshToken)
                 .map(newRefreshToken -> {
-                    String accessToken = jwtTokenProvider
-                            .generateAccessToken(newRefreshToken.getUser().getId().toString());
+                    String accessToken = jwtTokenProvider.generateAccessToken(
+                            newRefreshToken.getUser().getId().toString(),
+                            newRefreshToken.getToken(),
+                            newRefreshToken.getDeviceType()
+                    );
                     return ResponseEntity.ok(new TokenRefreshResponse(accessToken, newRefreshToken.getToken()));
                 })
                 .orElseThrow(() -> new TokenRefreshException(requestRefreshToken,
@@ -92,10 +109,15 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logoutUser() {
+    public ResponseEntity<?> logoutUser(@RequestBody(required = false) LogoutRequest request) {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication()
                 .getPrincipal();
-        refreshTokenService.deleteByUserId(userDetails.getId().toString());
+        if (request != null && request.getRefreshToken() != null && !request.getRefreshToken().isBlank()) {
+            refreshTokenService.deleteByToken(request.getRefreshToken());
+        } else {
+            // Backward-compatible behavior: logout all sessions
+            refreshTokenService.deleteByUserId(userDetails.getId().toString());
+        }
         return ResponseEntity.ok(new MessageResponse("Log out successful!"));
     }
 
@@ -155,12 +177,12 @@ public class AuthController {
     }
 
     @GetMapping("/qr-login/events/{sessionId}")
-    public SseEmitter subscribeQrLogin(@PathVariable String sessionId) {
+    public ResponseEntity<?> subscribeQrSession(@PathVariable String sessionId) {
         SseEmitter emitter = qrLoginService.subscribe(sessionId);
         if (emitter == null) {
-            throw new IllegalArgumentException("QR session not found or expired");
+            return ResponseEntity.badRequest().body(new MessageResponse("QR session not found or expired"));
         }
-        return emitter;
+        return ResponseEntity.ok(emitter);
     }
 
     @PostMapping("/qr-login/confirm")

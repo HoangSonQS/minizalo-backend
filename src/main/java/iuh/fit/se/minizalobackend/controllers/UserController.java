@@ -1,8 +1,11 @@
 package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.payload.request.UserProfileUpdateRequest;
+import iuh.fit.se.minizalobackend.payload.request.LockAccountRequest;
+import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
+import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.services.UserPresenceService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import jakarta.validation.Valid;
@@ -25,13 +28,19 @@ public class UserController {
 
     private final UserService userService;
     private final UserPresenceService userPresenceService;
+    private final RefreshTokenService refreshTokenService;
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final List<String> ALLOWED_MIME_TYPES = Arrays.asList("image/jpeg", "image/png", "image/gif");
 
-    public UserController(UserService userService, UserPresenceService userPresenceService) {
+    public UserController(
+            UserService userService,
+            UserPresenceService userPresenceService,
+            RefreshTokenService refreshTokenService
+    ) {
         this.userService = userService;
         this.userPresenceService = userPresenceService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @GetMapping("/me")
@@ -161,6 +170,17 @@ public class UserController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/lock-account")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<MessageResponse> lockAccount(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @Valid @RequestBody LockAccountRequest request) {
+        userService.lockAccount(userDetails.getId(), request.getPassword());
+        // Revoke all sessions immediately after account lock
+        refreshTokenService.deleteByUserId(userDetails.getId().toString());
+        return ResponseEntity.ok(new MessageResponse("Tài khoản đã được khóa thành công"));
+    }
+  
     @PostMapping("/sync-contacts")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
     public ResponseEntity<List<UserProfileResponse>> syncContacts(
