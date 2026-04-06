@@ -14,9 +14,11 @@ import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.payload.response.TokenRefreshResponse;
 import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
 import iuh.fit.se.minizalobackend.services.OtpService;
+import iuh.fit.se.minizalobackend.services.QrLoginService;
 import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.UserService;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -37,14 +39,17 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final UserService userService;
     private final OtpService otpService;
+    private final QrLoginService qrLoginService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
-            RefreshTokenService refreshTokenService, UserService userService, OtpService otpService) {
+            RefreshTokenService refreshTokenService, UserService userService, OtpService otpService,
+            QrLoginService qrLoginService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
         this.userService = userService;
         this.otpService = otpService;
+        this.qrLoginService = qrLoginService;
     }
 
     @PostMapping("/signin")
@@ -137,5 +142,35 @@ public class AuthController {
         otpService.invalidate(request.getPhone());
         userService.resetPassword(request.getPhone(), request.getNewPassword());
         return ResponseEntity.ok(new MessageResponse("Password reset successfully!"));
+    }
+
+    @GetMapping("/qr-login/generate")
+    public ResponseEntity<?> generateQrSession() {
+        return ResponseEntity.ok(qrLoginService.generateSession());
+    }
+
+    @GetMapping("/qr-login/events/{sessionId}")
+    public SseEmitter subscribeQrLogin(@PathVariable String sessionId) {
+        SseEmitter emitter = qrLoginService.subscribe(sessionId);
+        if (emitter == null) {
+            throw new IllegalArgumentException("QR session not found or expired");
+        }
+        return emitter;
+    }
+
+    @PostMapping("/qr-login/confirm")
+    public ResponseEntity<?> confirmQrLogin(
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal UserDetailsImpl userDetails) {
+        String sessionId = body.get("sessionId");
+        if (sessionId == null || sessionId.isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("sessionId is required"));
+        }
+        try {
+            qrLoginService.confirmSession(sessionId, userDetails.getId().toString());
+            return ResponseEntity.ok(new MessageResponse("QR login confirmed"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
     }
 }
