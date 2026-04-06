@@ -7,6 +7,7 @@ import iuh.fit.se.minizalobackend.dtos.request.VerifyOtpRequest;
 import iuh.fit.se.minizalobackend.exception.TokenRefreshException;
 import iuh.fit.se.minizalobackend.models.RefreshToken;
 import iuh.fit.se.minizalobackend.payload.request.LoginRequest;
+import iuh.fit.se.minizalobackend.payload.request.LogoutRequest;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.payload.request.TokenRefreshRequest;
 import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
@@ -92,10 +93,15 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logoutUser() {
+    public ResponseEntity<?> logoutUser(@RequestBody(required = false) LogoutRequest request) {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication()
                 .getPrincipal();
-        refreshTokenService.deleteByUserId(userDetails.getId().toString());
+        if (request != null && request.getRefreshToken() != null && !request.getRefreshToken().isBlank()) {
+            refreshTokenService.deleteByToken(request.getRefreshToken());
+        } else {
+            // Backward-compatible behavior: logout all sessions
+            refreshTokenService.deleteByUserId(userDetails.getId().toString());
+        }
         return ResponseEntity.ok(new MessageResponse("Log out successful!"));
     }
 
