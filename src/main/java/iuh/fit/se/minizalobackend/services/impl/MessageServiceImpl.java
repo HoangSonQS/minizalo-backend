@@ -246,8 +246,8 @@ public class MessageServiceImpl implements MessageService {
             Instant createdAt = Instant.parse(message.getCreatedAt());
             Instant now = Instant.now();
 
-            // Allow recall only within 5 minutes
-            if (now.isBefore(createdAt.plus(5, java.time.temporal.ChronoUnit.MINUTES))) {
+            // Allow recall only within 1 day
+            if (now.isBefore(createdAt.plus(1, java.time.temporal.ChronoUnit.DAYS))) {
                 message.setRecalled(true);
                 message.setRecalledAt(now.toString());
                 messageDynamoRepository.save(message);
@@ -260,8 +260,8 @@ public class MessageServiceImpl implements MessageService {
 
                 log.info("Message {} recalled in room {}", messageId, chatRoomId);
             } else {
-                log.warn("Recall failed: Message {} is older than 5 minutes", messageId);
-                throw new IllegalArgumentException("Cannot recall message after 5 minutes");
+                log.warn("Recall failed: Message {} is older than 1 day", messageId);
+                throw new IllegalArgumentException("Cannot recall message after 1 day");
             }
         });
     }

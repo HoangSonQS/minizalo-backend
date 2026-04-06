@@ -30,6 +30,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     List<User> findByPhoneContainingIgnoreCase(String phone);
 
+    List<User> findByPhoneIn(List<String> phones);
+
     @Modifying
     @Query("UPDATE User u SET u.isOnline = false")
     @Transactional
