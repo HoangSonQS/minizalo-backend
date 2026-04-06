@@ -22,6 +22,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Boolean existsByEmail(String email);
 
+    Boolean existsByEmailIgnoreCase(String email);
+
+    Boolean existsByPhone(String phone);
+
     // Tìm kiếm danh sách user theo username (case-insensitive)
     List<User> findByUsernameContainingIgnoreCase(String username);
 

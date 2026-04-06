@@ -16,6 +16,9 @@ import java.util.UUID;
 public interface UserService {
     void registerNewUser(SignupRequest signupRequest);
 
+    /** Gọi trước khi gửi OTP đăng ký: chặn SĐT/email đã có tài khoản. */
+    void assertContactAvailableForSignup(String phone, String email);
+
     UserProfileResponse getCurrentUserProfile(UserDetails userDetails);
 
     UserProfileResponse updateProfile(UserDetails userDetails, UserProfileUpdateRequest request);

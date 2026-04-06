@@ -13,6 +13,7 @@ import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.payload.response.TokenRefreshResponse;
 import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
+import iuh.fit.se.minizalobackend.services.EmailService;
 import iuh.fit.se.minizalobackend.services.OtpService;
 import iuh.fit.se.minizalobackend.services.QrLoginService;
 import iuh.fit.se.minizalobackend.services.RefreshTokenService;
@@ -39,16 +40,18 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final UserService userService;
     private final OtpService otpService;
+    private final EmailService emailService;
     private final QrLoginService qrLoginService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
             RefreshTokenService refreshTokenService, UserService userService, OtpService otpService,
-            QrLoginService qrLoginService) {
+            EmailService emailService, QrLoginService qrLoginService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
         this.userService = userService;
         this.otpService = otpService;
+        this.emailService = emailService;
         this.qrLoginService = qrLoginService;
     }
 
@@ -109,7 +112,18 @@ public class AuthController {
 
     @PostMapping("/send-otp")
     public ResponseEntity<?> sendOtp(@Valid @RequestBody SendOtpRequest request) {
-        otpService.generateOtp(request.getPhone());
+        userService.assertContactAvailableForSignup(request.getPhone(), request.getEmail());
+
+        String otp = otpService.generateOtp(request.getPhone());
+
+        if ("EMAIL".equalsIgnoreCase(request.getChannel())) {
+            if (request.getEmail() == null || request.getEmail().isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Email là bắt buộc khi chọn kênh EMAIL"));
+            }
+            emailService.sendOtpEmail(request.getEmail(), otp);
+        }
+
         return ResponseEntity.ok(new MessageResponse("OTP sent successfully!"));
     }
 
@@ -126,7 +140,16 @@ public class AuthController {
 
     @PostMapping("/forgot-password/send-otp")
     public ResponseEntity<?> forgotPasswordSendOtp(@Valid @RequestBody SendOtpRequest request) {
-        otpService.generateOtp(request.getPhone());
+        String otp = otpService.generateOtp(request.getPhone());
+
+        if ("EMAIL".equalsIgnoreCase(request.getChannel())) {
+            if (request.getEmail() == null || request.getEmail().isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Email là bắt buộc khi chọn kênh EMAIL"));
+            }
+            emailService.sendOtpEmail(request.getEmail(), otp);
+        }
+
         return ResponseEntity.ok(new MessageResponse("OTP sent successfully!"));
     }
 

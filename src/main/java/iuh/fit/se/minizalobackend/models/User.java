@@ -34,6 +34,8 @@ public class User {
     private String avatarUrl;
     private String coverPhotoUrl;
     private String statusMessage;
+
+    @Column(unique = true)
     private String phone;
     private String gender;
     private LocalDate dateOfBirth;
