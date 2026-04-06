@@ -41,6 +41,8 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         final String normalizedType = (deviceType == null || deviceType.isBlank()) ? "WEB" : deviceType.trim().toUpperCase();
         final String normalizedDeviceId = (deviceId == null || deviceId.isBlank()) ? "unknown" : deviceId.trim();
 
+        // Only delete tokens of the SAME deviceType if revokeExistingSameType is true.
+        // This allows MOBILE and WEB to coexist simultaneously.
         if (revokeExistingSameType) {
             refreshTokenRepository.deleteByUserIdAndDeviceType(user.getId(), normalizedType);
             refreshTokenRepository.flush();

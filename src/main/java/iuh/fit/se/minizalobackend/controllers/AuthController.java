@@ -199,13 +199,15 @@ public class AuthController {
         return ResponseEntity.ok(qrLoginService.generateSession());
     }
 
-    @GetMapping("/qr-login/events/{sessionId}")
-    public ResponseEntity<?> subscribeQrSession(@PathVariable String sessionId) {
+    @GetMapping(value = "/qr-login/events/{sessionId}", produces = "text/event-stream")
+    public SseEmitter subscribeQrSession(@PathVariable String sessionId) {
         SseEmitter emitter = qrLoginService.subscribe(sessionId);
         if (emitter == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("QR session not found or expired"));
+            SseEmitter errorEmitter = new SseEmitter(0L);
+            errorEmitter.completeWithError(new IllegalArgumentException("QR session not found or expired"));
+            return errorEmitter;
         }
-        return ResponseEntity.ok(emitter);
+        return emitter;
     }
 
     @PostMapping("/qr-login/confirm")

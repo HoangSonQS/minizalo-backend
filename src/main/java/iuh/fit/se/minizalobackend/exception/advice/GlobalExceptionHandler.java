@@ -2,9 +2,11 @@ package iuh.fit.se.minizalobackend.exception.advice;
 
 import iuh.fit.se.minizalobackend.exception.TokenRefreshException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException; // Add this import
 import org.springframework.security.authentication.LockedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -22,7 +24,9 @@ public class GlobalExceptionHandler {
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.BAD_REQUEST.value());
         errorDetails.put("message", ex.getMessage());
-        return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -36,7 +40,9 @@ public class GlobalExceptionHandler {
         errorDetails.put("status", HttpStatus.BAD_REQUEST.value());
         errorDetails.put("message", "Validation failed");
         errorDetails.put("errors", errors);
-        return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
     }
 
     @ExceptionHandler(TokenRefreshException.class)
@@ -45,7 +51,9 @@ public class GlobalExceptionHandler {
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.BAD_REQUEST.value());
         errorDetails.put("message", ex.getMessage());
-        return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
     }
 
     @ExceptionHandler(BadCredentialsException.class)
@@ -54,7 +62,9 @@ public class GlobalExceptionHandler {
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.UNAUTHORIZED.value());
         errorDetails.put("message", "Invalid username or password");
-        return new ResponseEntity<>(errorDetails, HttpStatus.UNAUTHORIZED);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
     }
 
     @ExceptionHandler(LockedException.class)
@@ -63,7 +73,19 @@ public class GlobalExceptionHandler {
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.FORBIDDEN.value());
         errorDetails.put("message", "Tài khoản đã bị khóa. Vui lòng liên hệ hỗ trợ.");
-        return new ResponseEntity<>(errorDetails, HttpStatus.FORBIDDEN);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
+    }
+
+    /**
+     * Khi client gửi header Accept không chấp nhận JSON (vd: chỉ text/event-stream),
+     * Spring có thể ném 406 "No acceptable representation".
+     * Trả về 406 gọn để tránh ExceptionHandler tự phát sinh lỗi và spam stacktrace.
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<Void> handleNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
     }
 
     @ExceptionHandler(Exception.class)
@@ -72,6 +94,8 @@ public class GlobalExceptionHandler {
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
         errorDetails.put("message", "An unexpected error occurred: " + ex.getMessage());
-        return new ResponseEntity<>(errorDetails, HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
     }
 }
