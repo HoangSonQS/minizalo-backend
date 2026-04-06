@@ -41,6 +41,7 @@ public class User {
     private LocalDateTime lastSeen;
     private Boolean isOnline = false;
     private String fcmToken;
+    private Boolean allowPhoneSearch = true; // Mặc định cho phép tìm qua SĐT
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -22,4 +22,5 @@ public class UserProfileUpdateRequest {
     private LocalDate dateOfBirth;
     @Size(max = 500)
     private String businessDescription;
+    private Boolean allowPhoneSearch;
 }

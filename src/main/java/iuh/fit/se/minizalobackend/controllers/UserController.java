@@ -119,8 +119,10 @@ public class UserController {
 
     @GetMapping("/search")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    public ResponseEntity<List<UserProfileResponse>> searchUsers(@RequestParam String q) {
-        List<UserProfileResponse> users = userService.searchUsers(q);
+    public ResponseEntity<List<UserProfileResponse>> searchUsers(
+            @AuthenticationPrincipal iuh.fit.se.minizalobackend.security.services.UserDetailsImpl userDetails,
+            @RequestParam String q) {
+        List<UserProfileResponse> users = userService.searchUsers(q, userDetails.getId());
         return ResponseEntity.ok(users);
     }
 
@@ -157,5 +159,18 @@ public class UserController {
             @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request) {
         userService.muteConversation(userDetails.getId(), request);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/sync-contacts")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<List<UserProfileResponse>> syncContacts(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @RequestBody Map<String, List<String>> body) {
+        List<String> phoneNumbers = body.get("phoneNumbers");
+        if (phoneNumbers == null || phoneNumbers.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<UserProfileResponse> matchedUsers = userService.findUsersByPhoneNumbers(phoneNumbers, userDetails.getId());
+        return ResponseEntity.ok(matchedUsers);
     }
 }
