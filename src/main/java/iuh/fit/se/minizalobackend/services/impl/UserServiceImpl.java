@@ -319,6 +319,12 @@ public class UserServiceImpl implements UserService {
     public void resetPassword(String phone, String newPassword) {
         User user = userRepository.findByPhone(phone)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with phone: " + phone));
+                
+        // Check new password is different from old password
+        if (encoder.matches(newPassword, user.getPassword())) {
+            throw new IllegalArgumentException("New password must be different from old password");
+        }
+
         user.setPassword(encoder.encode(newPassword));
         userRepository.save(user);
         log.info("Password reset successfully for phone: {}", phone);

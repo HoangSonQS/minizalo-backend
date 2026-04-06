@@ -139,8 +139,13 @@ public class AuthController {
             return ResponseEntity.badRequest().body(new MessageResponse("Invalid or expired OTP"));
         }
         otpService.invalidate(request.getPhone());
-        userService.resetPassword(request.getPhone(), request.getNewPassword());
-        return ResponseEntity.ok(new MessageResponse("Password reset successfully!"));
+        
+        try {
+            userService.resetPassword(request.getPhone(), request.getNewPassword());
+            return ResponseEntity.ok(new MessageResponse("Password reset successfully!"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
     }
 
     @GetMapping("/qr-login/generate")
