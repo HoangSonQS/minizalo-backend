@@ -66,7 +66,7 @@ public class GroupChatControllerTest {
         void setUp() {
                 testUserId = UUID.randomUUID();
                 userDetails = new UserDetailsImpl(testUserId, "testuser", "test@example.com", "password",
-                                new ArrayList<>());
+                                false, new ArrayList<>());
                 testUser = new User();
                 testUser.setId(testUserId);
                 testUser.setUsername("testuser");

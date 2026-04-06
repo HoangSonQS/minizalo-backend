@@ -38,9 +38,33 @@ public class JwtTokenProvider {
 
     public String generateAccessToken(Authentication authentication) {
         UserDetailsImpl userPrincipal = (UserDetailsImpl) authentication.getPrincipal();
-        return generateAccessToken(userPrincipal.getId().toString());
+        return generateAccessToken(userPrincipal.getId().toString(), null, null);
     }
 
+    /**
+     * Access token for API/WS authentication.
+     * Optionally embeds sessionToken + deviceType so server can invalidate sessions immediately
+     * by deleting refresh token rows.
+     */
+    public String generateAccessToken(String userId, String sessionToken, String deviceType) {
+        JwtBuilder builder = Jwts.builder()
+                .setSubject(userId)
+                .setIssuedAt(new Date())
+                .setExpiration(Date.from(Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES)));
+
+        if (sessionToken != null && !sessionToken.isBlank()) {
+            builder.claim("st", sessionToken);
+        }
+        if (deviceType != null && !deviceType.isBlank()) {
+            builder.claim("dt", deviceType.trim().toUpperCase());
+        }
+
+        return builder
+                .signWith(key, SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    // Backward compatible overload
     public String generateAccessToken(String userId) {
         return Jwts.builder()
                 .setSubject(userId)
@@ -84,6 +108,24 @@ public class JwtTokenProvider {
                 .parseClaimsJws(token)
                 .getBody()
                 .getSubject();
+    }
+
+    public String getSessionTokenFromAccessToken(String token) {
+        try {
+            Claims claims = getClaimsFromToken(token);
+            return claims.get("st", String.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public String getDeviceTypeFromAccessToken(String token) {
+        try {
+            Claims claims = getClaimsFromToken(token);
+            return claims.get("dt", String.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public Claims getClaimsFromToken(String token) {

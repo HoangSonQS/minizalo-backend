@@ -63,6 +63,7 @@ class UserControllerTest {
                 "testuser",
                 "test@example.com",
                 "password",
+                false,
                 List.of(new SimpleGrantedAuthority("ROLE_USER")));
         testUser = new User();
         testUser.setId(testUserId);

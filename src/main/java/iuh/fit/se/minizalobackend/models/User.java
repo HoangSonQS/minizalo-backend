@@ -40,6 +40,7 @@ public class User {
     private String businessDescription;
     private LocalDateTime lastSeen;
     private Boolean isOnline = false;
+    private Boolean accountLocked = false;
     private String fcmToken;
 
     private LocalDateTime createdAt;

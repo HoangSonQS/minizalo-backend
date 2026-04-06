@@ -39,4 +39,6 @@ public interface UserService {
     void updateOnlineStatus(UUID userId, boolean isOnline);
 
     void resetPassword(String phone, String newPassword);
+
+    void lockAccount(UUID userId, String password);
 }

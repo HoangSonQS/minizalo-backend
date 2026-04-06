@@ -86,8 +86,9 @@ public class QrLoginServiceImpl implements QrLoginService {
             throw new IllegalArgumentException("QR session already used");
         }
 
-        String accessToken = jwtTokenProvider.generateAccessToken(userId);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userId);
+        // QR login lands on WEB session by default
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userId, "WEB", "qr", true);
+        String accessToken = jwtTokenProvider.generateAccessToken(userId, refreshToken.getToken(), "WEB");
         userService.updateOnlineStatus(UUID.fromString(userId), true);
 
         session.status = "CONFIRMED";

@@ -33,20 +33,33 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     @Override
     @Transactional
-    public RefreshToken createRefreshToken(String userId) {
+    public RefreshToken createRefreshToken(String userId, String deviceType, String deviceId, boolean revokeExistingSameType) {
 
         var user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId));
 
-        RefreshToken refreshToken = refreshTokenRepository
-                .findByUser(user)
-                .orElseGet(RefreshToken::new);
+        final String normalizedType = (deviceType == null || deviceType.isBlank()) ? "WEB" : deviceType.trim().toUpperCase();
+        final String normalizedDeviceId = (deviceId == null || deviceId.isBlank()) ? "unknown" : deviceId.trim();
 
+        if (revokeExistingSameType) {
+            refreshTokenRepository.deleteByUserIdAndDeviceType(user.getId(), normalizedType);
+            refreshTokenRepository.flush();
+        }
+
+        RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(user);
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));
         refreshToken.setToken(UUID.randomUUID().toString());
+        refreshToken.setDeviceType(normalizedType);
+        refreshToken.setDeviceId(normalizedDeviceId);
 
-        return refreshTokenRepository.save(refreshToken);
+        refreshToken = refreshTokenRepository.save(refreshToken);
+        return refreshToken;
+    }
+
+    // Backward-compatible overload for direct impl calls in existing tests
+    public RefreshToken createRefreshToken(String userId) {
+        return createRefreshToken(userId, "WEB", "unknown", false);
     }
 
     @Override
@@ -65,7 +78,12 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     public RefreshToken rotateRefreshToken(RefreshToken oldToken) {
         refreshTokenRepository.deleteById(oldToken.getId());
         refreshTokenRepository.flush();
-        return createRefreshToken(oldToken.getUser().getId().toString());
+        return createRefreshToken(
+                oldToken.getUser().getId().toString(),
+                oldToken.getDeviceType(),
+                oldToken.getDeviceId(),
+                false
+        );
     }
 
     @Override
