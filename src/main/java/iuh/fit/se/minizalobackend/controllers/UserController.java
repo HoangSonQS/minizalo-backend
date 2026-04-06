@@ -128,8 +128,10 @@ public class UserController {
 
     @GetMapping("/search")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    public ResponseEntity<List<UserProfileResponse>> searchUsers(@RequestParam String q) {
-        List<UserProfileResponse> users = userService.searchUsers(q);
+    public ResponseEntity<List<UserProfileResponse>> searchUsers(
+            @AuthenticationPrincipal iuh.fit.se.minizalobackend.security.services.UserDetailsImpl userDetails,
+            @RequestParam String q) {
+        List<UserProfileResponse> users = userService.searchUsers(q, userDetails.getId());
         return ResponseEntity.ok(users);
     }
 
@@ -177,5 +179,18 @@ public class UserController {
         // Revoke all sessions immediately after account lock
         refreshTokenService.deleteByUserId(userDetails.getId().toString());
         return ResponseEntity.ok(new MessageResponse("Tài khoản đã được khóa thành công"));
+    }
+  
+    @PostMapping("/sync-contacts")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<List<UserProfileResponse>> syncContacts(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @RequestBody Map<String, List<String>> body) {
+        List<String> phoneNumbers = body.get("phoneNumbers");
+        if (phoneNumbers == null || phoneNumbers.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<UserProfileResponse> matchedUsers = userService.findUsersByPhoneNumbers(phoneNumbers, userDetails.getId());
+        return ResponseEntity.ok(matchedUsers);
     }
 }

@@ -10,6 +10,7 @@ import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.payload.request.UserProfileUpdateRequest;
 import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
+import iuh.fit.se.minizalobackend.repository.FriendRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
@@ -45,6 +46,7 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roleRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final GroupRepository groupRepository;
+    private final FriendRepository friendRepository;
     private final iuh.fit.se.minizalobackend.security.JwtTokenProvider jwtTokenProvider;
 
     @Override
@@ -144,6 +146,9 @@ public class UserServiceImpl implements UserService {
         if (request.getBusinessDescription() != null) {
             user.setBusinessDescription(request.getBusinessDescription());
         }
+        if (request.getAllowPhoneSearch() != null) {
+            user.setAllowPhoneSearch(request.getAllowPhoneSearch());
+        }
 
         return mapUserToUserProfileResponse(userRepository.save(user));
     }
@@ -182,7 +187,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<UserProfileResponse> searchUsers(String query) {
+    public List<UserProfileResponse> searchUsers(String query, UUID currentUserId) {
         String q = query == null ? "" : query.trim();
         if (q.isEmpty()) {
             return List.of();
@@ -190,14 +195,38 @@ public class UserServiceImpl implements UserService {
 
         // Nếu query là chuỗi toàn số: coi là số điện thoại, yêu cầu khớp chính xác
         if (q.matches("\\d+")) {
-            return userRepository.findByPhone(q)
-                    .map(this::mapUserToUserProfileResponse)
-                    .map(List::of)
-                    .orElse(List.of());
+            Optional<User> targetUserOpt = userRepository.findByPhone(q);
+            if (targetUserOpt.isEmpty()) {
+                return List.of();
+            }
+
+            User targetUser = targetUserOpt.get();
+            // Nếu là chính mình thì cho thấy
+            if (targetUser.getId().equals(currentUserId)) {
+                return List.of(mapUserToUserProfileResponse(targetUser));
+            }
+
+            // Nếu cho phép tìm qua SĐT thì cho thấy
+            if (Boolean.TRUE.equals(targetUser.getAllowPhoneSearch())) {
+                return List.of(mapUserToUserProfileResponse(targetUser));
+            }
+
+            // Nếu không cho phép, nhưng ĐÃ LÀ BẠN BÈ thì vẫn cho thấy
+            User requester = userRepository.findById(currentUserId).orElse(null);
+            if (requester != null) {
+                boolean isFriend = friendRepository.findByUserAndFriend(requester, targetUser).isPresent()
+                        || friendRepository.findByUserAndFriend(targetUser, requester).isPresent();
+                if (isFriend) {
+                    return List.of(mapUserToUserProfileResponse(targetUser));
+                }
+            }
+
+            return List.of();
         }
 
-        // Ngược lại (chứa chữ cái): cho phép tìm gần đúng theo username
+        // Ngược lại (chứa chữ cái): tìm theo username và lọc ra chính mình
         return userRepository.findByUsernameContainingIgnoreCase(q).stream()
+                .filter(u -> !u.getId().equals(currentUserId))
                 .map(this::mapUserToUserProfileResponse)
                 .collect(Collectors.toList());
     }
@@ -230,7 +259,8 @@ public class UserServiceImpl implements UserService {
                 user.getIsOnline(),
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
-                roleNames);
+                roleNames,
+                user.getAllowPhoneSearch());
     }
 
     @Override
@@ -344,5 +374,44 @@ public class UserServiceImpl implements UserService {
         user.setIsOnline(false);
         user.setLastSeen(LocalDateTime.now());
         userRepository.save(user);
+    }
+  
+    @Override
+    public List<UserProfileResponse> findUsersByPhoneNumbers(List<String> phoneNumbers, UUID currentUserId) {
+        // Normalize phone numbers: strip spaces, dashes, and handle Vietnamese format (0xxx -> +84xxx)
+        List<String> normalized = phoneNumbers.stream()
+                .map(p -> p.replaceAll("[\\s\\-()]", ""))
+                .filter(p -> !p.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Also generate alternative formats for matching
+        // e.g., "0912345678" → "0912345678", "+84912345678", "84912345678"
+        List<String> allVariants = normalized.stream()
+                .flatMap(p -> {
+                    java.util.stream.Stream.Builder<String> variants = java.util.stream.Stream.builder();
+                    variants.add(p);
+                    if (p.startsWith("0")) {
+                        variants.add("+84" + p.substring(1));
+                        variants.add("84" + p.substring(1));
+                    } else if (p.startsWith("+84")) {
+                        variants.add("0" + p.substring(3));
+                        variants.add("84" + p.substring(3));
+                    } else if (p.startsWith("84") && p.length() >= 11) {
+                        variants.add("0" + p.substring(2));
+                        variants.add("+" + p);
+                    }
+                    return variants.build();
+                })
+                .distinct()
+                .collect(Collectors.toList());
+
+        List<User> matchedUsers = userRepository.findByPhoneIn(allVariants);
+
+        return matchedUsers.stream()
+                .filter(u -> !u.getId().equals(currentUserId))
+                .filter(u -> Boolean.TRUE.equals(u.getAllowPhoneSearch())) // Dòng này thêm vào: Lọc ra ai cho phép
+                .map(this::mapUserToUserProfileResponse)
+                .collect(Collectors.toList());
     }
 }

@@ -24,7 +24,7 @@ public interface UserService {
 
     UserProfileResponse uploadCoverPhoto(UserDetails userDetails, MultipartFile coverFile) throws IOException;
 
-    List<UserProfileResponse> searchUsers(String query);
+    List<UserProfileResponse> searchUsers(String query, UUID currentUserId);
 
     Optional<User> getUserById(UUID id);
 
@@ -41,4 +41,6 @@ public interface UserService {
     void resetPassword(String phone, String newPassword);
 
     void lockAccount(UUID userId, String password);
+  
+    List<UserProfileResponse> findUsersByPhoneNumbers(List<String> phoneNumbers, UUID currentUserId);
 }
