@@ -361,6 +361,22 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
+    public void lockAccount(UUID userId, String password) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        if (!encoder.matches(password, user.getPassword())) {
+            throw new IllegalArgumentException("Mật khẩu không chính xác");
+        }
+
+        user.setAccountLocked(true);
+        user.setIsOnline(false);
+        user.setLastSeen(LocalDateTime.now());
+        userRepository.save(user);
+    }
+  
+    @Override
     public List<UserProfileResponse> findUsersByPhoneNumbers(List<String> phoneNumbers, UUID currentUserId) {
         // Normalize phone numbers: strip spaces, dashes, and handle Vietnamese format (0xxx -> +84xxx)
         List<String> normalized = phoneNumbers.stream()

@@ -7,7 +7,11 @@ import java.util.Optional;
 public interface RefreshTokenService {
     Optional<RefreshToken> findByToken(String token);
 
-    RefreshToken createRefreshToken(String userId);
+    RefreshToken createRefreshToken(String userId, String deviceType, String deviceId, boolean revokeExistingSameType);
+    // Backward-compatible signature for existing tests/callers
+    default RefreshToken createRefreshToken(String userId) {
+        return createRefreshToken(userId, "WEB", "unknown", false);
+    }
 
     RefreshToken verifyExpiration(RefreshToken token);
 

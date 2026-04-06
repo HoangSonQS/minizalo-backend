@@ -40,5 +40,7 @@ public interface UserService {
 
     void resetPassword(String phone, String newPassword);
 
+    void lockAccount(UUID userId, String password);
+  
     List<UserProfileResponse> findUsersByPhoneNumbers(List<String> phoneNumbers, UUID currentUserId);
 }
