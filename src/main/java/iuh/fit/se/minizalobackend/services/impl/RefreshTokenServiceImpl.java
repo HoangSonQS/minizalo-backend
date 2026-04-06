@@ -38,13 +38,15 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         var user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId));
 
-        RefreshToken refreshToken = new RefreshToken();
+        RefreshToken refreshToken = refreshTokenRepository
+                .findByUser(user)
+                .orElseGet(RefreshToken::new);
+
         refreshToken.setUser(user);
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));
         refreshToken.setToken(UUID.randomUUID().toString());
 
-        refreshToken = refreshTokenRepository.save(refreshToken);
-        return refreshToken;
+        return refreshTokenRepository.save(refreshToken);
     }
 
     @Override
