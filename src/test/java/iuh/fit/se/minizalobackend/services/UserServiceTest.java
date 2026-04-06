@@ -53,7 +53,8 @@ class UserServiceTest {
 
         when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
-        when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
+        when(userRepository.existsByPhone(signupRequest.getPhone())).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase(signupRequest.getEmail())).thenReturn(false);
         when(passwordEncoder.encode(signupRequest.getPassword())).thenReturn("encodedPassword");
 
         Role userRole = new Role();
@@ -65,7 +66,8 @@ class UserServiceTest {
         userServiceImpl.registerNewUser(signupRequest);
 
         verify(userRepository, times(1)).existsByUsername("0987654321");
-        verify(userRepository, times(1)).existsByEmail("test@example.com");
+        verify(userRepository, times(1)).existsByPhone("0987654321");
+        verify(userRepository, times(1)).existsByEmailIgnoreCase("test@example.com");
         verify(passwordEncoder, times(1)).encode("password123");
         verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
         verify(userRepository, times(1)).save(any(User.class));
@@ -82,9 +84,10 @@ class UserServiceTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userServiceImpl.registerNewUser(signupRequest));
 
-        assertEquals("Error: Phone number is already registered!", exception.getMessage());
+        assertEquals("Số điện thoại đã được đăng ký", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("0987654321");
         verify(userRepository, never()).existsByEmail(anyString());
+        verify(userRepository, never()).existsByEmailIgnoreCase(anyString());
         verify(passwordEncoder, never()).encode(anyString());
         verify(roleRepository, never()).findByName(any(ERole.class));
         verify(userRepository, never()).save(any(User.class));
@@ -98,14 +101,16 @@ class UserServiceTest {
         when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
 
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
-        when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(true);
+        when(userRepository.existsByPhone(signupRequest.getPhone())).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase(signupRequest.getEmail())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userServiceImpl.registerNewUser(signupRequest));
 
-        assertEquals("Error: Email is already in use!", exception.getMessage());
+        assertEquals("Email đã được sử dụng", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("0987654321");
-        verify(userRepository, times(1)).existsByEmail("existing@example.com");
+        verify(userRepository, times(1)).existsByPhone("0987654321");
+        verify(userRepository, times(1)).existsByEmailIgnoreCase("existing@example.com");
         verify(passwordEncoder, never()).encode(anyString());
         verify(roleRepository, never()).findByName(any(ERole.class));
         verify(userRepository, never()).save(any(User.class));
@@ -117,7 +122,9 @@ class UserServiceTest {
 
         when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
-        when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
+        when(userRepository.existsByPhone(signupRequest.getPhone())).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase(signupRequest.getEmail())).thenReturn(false);
+        when(passwordEncoder.encode(signupRequest.getPassword())).thenReturn("encodedPassword");
         when(roleRepository.findByName(ERole.ROLE_USER)).thenReturn(Optional.empty());
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -125,9 +132,9 @@ class UserServiceTest {
 
         assertEquals("Error: User role is not found.", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("0987654321");
-        verify(userRepository, times(1)).existsByEmail("test@example.com");
+        verify(userRepository, times(1)).existsByPhone("0987654321");
+        verify(userRepository, times(1)).existsByEmailIgnoreCase("test@example.com");
         verify(passwordEncoder, times(1)).encode(anyString());
-        verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
         verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
         verify(userRepository, never()).save(any(User.class));
     }

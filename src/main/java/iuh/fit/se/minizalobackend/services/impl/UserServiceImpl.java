@@ -50,6 +50,26 @@ public class UserServiceImpl implements UserService {
     private final iuh.fit.se.minizalobackend.security.JwtTokenProvider jwtTokenProvider;
 
     @Override
+    @Transactional(readOnly = true)
+    public void assertContactAvailableForSignup(String phone, String email) {
+        String p = phone != null ? phone.trim() : "";
+        if (p.isEmpty()) {
+            throw new IllegalArgumentException("Số điện thoại không được để trống");
+        }
+        String e = email != null ? email.trim() : "";
+        if (e.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng nhập email");
+        }
+        if (Boolean.TRUE.equals(userRepository.existsByUsername(p))
+                || Boolean.TRUE.equals(userRepository.existsByPhone(p))) {
+            throw new IllegalArgumentException("Số điện thoại đã được đăng ký");
+        }
+        if (Boolean.TRUE.equals(userRepository.existsByEmailIgnoreCase(e))) {
+            throw new IllegalArgumentException("Email đã được sử dụng");
+        }
+    }
+
+    @Override
     @Transactional
     public void registerNewUser(SignupRequest signupRequest) {
         long startTime = System.nanoTime();
@@ -57,26 +77,19 @@ public class UserServiceImpl implements UserService {
 
         // Verify the verification token
         if (signupRequest.getVerificationToken() == null || signupRequest.getVerificationToken().isBlank()) {
-            throw new IllegalArgumentException("Phone verification is required");
+            throw new IllegalArgumentException("Cần xác thực số điện thoại trước khi đăng ký");
         }
         try {
             String verifiedPhone = jwtTokenProvider.getPhoneFromVerificationToken(signupRequest.getVerificationToken());
             if (!verifiedPhone.equals(signupRequest.getPhone())) {
-                throw new IllegalArgumentException("Verification token does not match the provided phone number");
+                throw new IllegalArgumentException("Mã xác thực không khớp với số điện thoại");
             }
         } catch (Exception e) {
             if (e instanceof IllegalArgumentException) throw e;
-            throw new IllegalArgumentException("Invalid or expired verification token");
+            throw new IllegalArgumentException("Mã xác thực không hợp lệ hoặc đã hết hạn");
         }
 
-        // Use phone as the unique username
-        if (userRepository.existsByUsername(signupRequest.getPhone())) {
-            throw new IllegalArgumentException("Error: Phone number is already registered!");
-        }
-
-        if (userRepository.existsByEmail(signupRequest.getEmail())) {
-            throw new IllegalArgumentException("Error: Email is already in use!");
-        }
+        assertContactAvailableForSignup(signupRequest.getPhone(), signupRequest.getEmail());
 
         // Create new user's account
         User user = new User(
