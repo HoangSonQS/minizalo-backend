@@ -9,7 +9,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -20,45 +22,53 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class QrLoginServiceImpl implements QrLoginService {
 
-    private static final long SESSION_TTL_SECONDS = 180; // 3 minutes
+    private static final long SESSION_TTL_MS = 180_000; // 3 minutes
 
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final UserService userService;
 
-    private record QrSession(String status, String userId, String accessToken, String refreshToken, Instant createdAt) {}
+    private static class QrSession {
+        String status;
+        long createdAt;
+
+        QrSession(String status, long createdAt) {
+            this.status = status;
+            this.createdAt = createdAt;
+        }
+    }
 
     private final ConcurrentHashMap<String, QrSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
     @Override
     public Map<String, Object> generateSession() {
         String sessionId = UUID.randomUUID().toString();
-        Instant now = Instant.now();
-        sessions.put(sessionId, new QrSession("PENDING", null, null, null, now));
-        Instant expiresAt = now.plusSeconds(SESSION_TTL_SECONDS);
+        sessions.put(sessionId, new QrSession("PENDING", System.currentTimeMillis()));
+        Instant expiresAt = Instant.now().plusMillis(SESSION_TTL_MS);
         log.info("QR login session created: {}", sessionId);
         return Map.of("sessionId", sessionId, "expiresAt", expiresAt.toString());
     }
 
     @Override
-    public Map<String, Object> getSessionStatus(String sessionId) {
+    public SseEmitter subscribe(String sessionId) {
         QrSession session = sessions.get(sessionId);
-        if (session == null) {
-            return Map.of("status", "EXPIRED");
+        if (session == null || isExpired(session)) {
+            return null;
         }
-        if (Instant.now().isAfter(session.createdAt().plusSeconds(SESSION_TTL_SECONDS))) {
+
+        SseEmitter emitter = new SseEmitter(SESSION_TTL_MS);
+
+        emitter.onCompletion(() -> emitters.remove(sessionId));
+        emitter.onTimeout(() -> {
+            emitters.remove(sessionId);
             sessions.remove(sessionId);
-            return Map.of("status", "EXPIRED");
-        }
-        if ("CONFIRMED".equals(session.status())) {
-            sessions.remove(sessionId);
-            return Map.of(
-                "status", "CONFIRMED",
-                "accessToken", session.accessToken(),
-                "refreshToken", session.refreshToken()
-            );
-        }
-        return Map.of("status", session.status());
+        });
+        emitter.onError(e -> emitters.remove(sessionId));
+
+        emitters.put(sessionId, emitter);
+        log.info("SSE subscriber connected for QR session: {}", sessionId);
+        return emitter;
     }
 
     @Override
@@ -67,25 +77,60 @@ public class QrLoginServiceImpl implements QrLoginService {
         if (session == null) {
             throw new IllegalArgumentException("QR session not found or expired");
         }
-        if (Instant.now().isAfter(session.createdAt().plusSeconds(SESSION_TTL_SECONDS))) {
+        if (isExpired(session)) {
             sessions.remove(sessionId);
+            emitters.remove(sessionId);
             throw new IllegalArgumentException("QR session expired");
         }
-        if (!"PENDING".equals(session.status())) {
+        if (!"PENDING".equals(session.status)) {
             throw new IllegalArgumentException("QR session already used");
         }
 
         String accessToken = jwtTokenProvider.generateAccessToken(userId);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userId);
-        userService.updateOnlineStatus(java.util.UUID.fromString(userId), true);
+        userService.updateOnlineStatus(UUID.fromString(userId), true);
 
-        sessions.put(sessionId, new QrSession("CONFIRMED", userId, accessToken, refreshToken.getToken(), session.createdAt()));
+        session.status = "CONFIRMED";
+
+        SseEmitter emitter = emitters.remove(sessionId);
+        if (emitter != null) {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("confirmed")
+                        .data(Map.of(
+                                "status", "CONFIRMED",
+                                "accessToken", accessToken,
+                                "refreshToken", refreshToken.getToken()
+                        )));
+                emitter.complete();
+            } catch (IOException e) {
+                log.warn("Failed to send SSE event for QR session {}: {}", sessionId, e.getMessage());
+            }
+        }
+
+        sessions.remove(sessionId);
         log.info("QR login confirmed for user {} on session {}", userId, sessionId);
     }
 
-    @Scheduled(fixedRate = 60000)
+    private boolean isExpired(QrSession session) {
+        return System.currentTimeMillis() - session.createdAt > SESSION_TTL_MS;
+    }
+
+    @Scheduled(fixedRate = 60_000)
     public void cleanupExpiredSessions() {
-        Instant cutoff = Instant.now().minusSeconds(SESSION_TTL_SECONDS + 30);
-        sessions.entrySet().removeIf(e -> e.getValue().createdAt().isBefore(cutoff));
+        long now = System.currentTimeMillis();
+        sessions.entrySet().removeIf(e -> {
+            if (now - e.getValue().createdAt > SESSION_TTL_MS + 30_000) {
+                SseEmitter emitter = emitters.remove(e.getKey());
+                if (emitter != null) {
+                    try {
+                        emitter.send(SseEmitter.event().name("expired").data(Map.of("status", "EXPIRED")));
+                        emitter.complete();
+                    } catch (IOException ignored) {}
+                }
+                return true;
+            }
+            return false;
+        });
     }
 }

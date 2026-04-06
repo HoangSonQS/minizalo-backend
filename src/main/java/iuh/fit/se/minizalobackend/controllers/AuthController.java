@@ -18,6 +18,7 @@ import iuh.fit.se.minizalobackend.services.QrLoginService;
 import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.UserService;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -153,9 +154,13 @@ public class AuthController {
         return ResponseEntity.ok(qrLoginService.generateSession());
     }
 
-    @GetMapping("/qr-login/status/{sessionId}")
-    public ResponseEntity<?> getQrSessionStatus(@PathVariable String sessionId) {
-        return ResponseEntity.ok(qrLoginService.getSessionStatus(sessionId));
+    @GetMapping("/qr-login/events/{sessionId}")
+    public SseEmitter subscribeQrLogin(@PathVariable String sessionId) {
+        SseEmitter emitter = qrLoginService.subscribe(sessionId);
+        if (emitter == null) {
+            throw new IllegalArgumentException("QR session not found or expired");
+        }
+        return emitter;
     }
 
     @PostMapping("/qr-login/confirm")
