@@ -11,6 +11,9 @@ import iuh.fit.se.minizalobackend.services.ChatRoomService;
 import iuh.fit.se.minizalobackend.services.FriendService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import lombok.RequiredArgsConstructor;
+import iuh.fit.se.minizalobackend.services.MessageService;
+import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
+import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,7 @@ public class FriendServiceImpl implements FriendService {
     private final FriendCategoryAssignmentRepository assignmentRepository;
     private final UserService userService;
     private final ChatRoomService chatRoomService;
+    private final MessageService messageService;
 
     @Override
     @Transactional
@@ -80,7 +84,14 @@ public class FriendServiceImpl implements FriendService {
         friendRepository.save(reciprocalFriendship);
 
         // Create direct chat room
-        chatRoomService.createDirectChat(friendRequest.getUser(), friendRequest.getFriend());
+        iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse room =
+                chatRoomService.createDirectChat(friendRequest.getUser(), friendRequest.getFriend());
+
+        // Send automatic Hello message
+        ChatMessageRequest helloRequest = new ChatMessageRequest();
+        helloRequest.setReceiverId(room.getId().toString());
+        helloRequest.setContent("Hello");
+        messageService.processMessage(helloRequest, friendRequest.getFriend().getId().toString());
 
         return mapFriendToFriendResponse(acceptedRequest);
     }

@@ -52,6 +52,7 @@ public class MessageServiceImpl implements MessageService {
     private final UserRepository userRepository;
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public MessageDynamo saveMessage(MessageDynamo message) {
         // Ensure required fields are set before saving
         if (message.getMessageId() == null) {
@@ -74,6 +75,7 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public MessageDynamo forwardMessage(String originalRoomId, String originalMessageId, String targetRoomId,
             String senderId) {
         MessageDynamo originalMessage = messageDynamoRepository.getMessage(originalRoomId, originalMessageId)
@@ -108,10 +110,14 @@ public class MessageServiceImpl implements MessageService {
         analyticsService.logActivity(UUID.fromString(senderId), AppConstants.ACTIVITY_MESSAGE_FORWARDED,
                 "Forwarded message " + originalMessageId + " to room " + targetRoomId);
 
+        // Trigger notifications
+        triggerNotifications(forwardedMessage);
+
         return forwardedMessage;
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public MessageDynamo processMessage(ChatMessageRequest request, String senderId) {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
