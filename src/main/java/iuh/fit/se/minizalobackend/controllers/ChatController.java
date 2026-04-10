@@ -133,6 +133,19 @@ public class ChatController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/api/chat/rooms/private/{userId}")
+    public ResponseEntity<ChatRoomResponse> createDirectChat(
+            @PathVariable UUID userId,
+            Principal principal) {
+        String currentUserId = getUserIdFromPrincipal(principal);
+        User user1 = userService.getUserById(UUID.fromString(currentUserId))
+                .orElseThrow(() -> new UsernameNotFoundException("Current user not found"));
+        User user2 = userService.getUserById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("Partner user not found"));
+
+        return ResponseEntity.ok(chatRoomService.createDirectChat(user1, user2));
+    }
+
     @PostMapping("/api/chat/send")
     public ResponseEntity<Map<String, Object>> sendMessageRest(
             @Valid @RequestBody ChatMessageRequest chatMessageRequest,

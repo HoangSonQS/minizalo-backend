@@ -47,7 +47,8 @@ public class MinioServiceImpl implements MinioService {
 
     @Override
     public String uploadFile(MultipartFile file, String folder, String fileName) throws IOException {
-        String objectName = folder + UUID.randomUUID().toString() + "_" + fileName;
+        String sanitizedFileName = fileName.replaceAll("[^a-zA-Z0-9.-]", "_");
+        String objectName = folder + UUID.randomUUID().toString() + "_" + sanitizedFileName;
         try {
             minioClient.putObject(
                     PutObjectArgs.builder()
@@ -66,7 +67,8 @@ public class MinioServiceImpl implements MinioService {
 
     @Override
     public String getPresignedUrl(String folder, String fileName, String contentType) {
-        String objectName = folder + UUID.randomUUID().toString() + "_" + fileName;
+        String sanitizedFileName = fileName.replaceAll("[^a-zA-Z0-9.-]", "_");
+        String objectName = folder + UUID.randomUUID().toString() + "_" + sanitizedFileName;
         try {
             java.util.Map<String, String> headers = new java.util.HashMap<>();
             headers.put("Content-Type", contentType);
