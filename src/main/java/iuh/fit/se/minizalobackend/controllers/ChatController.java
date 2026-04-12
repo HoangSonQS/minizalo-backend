@@ -110,16 +110,33 @@ public class ChatController {
 
     @MessageMapping("/chat.pin")
     public void handlePinMessage(@Payload @Valid PinMessageRequest request, Principal principal) {
-        messageService.pinMessage(request.getRoomId(), request.getMessageId(), request.isPin());
+        try {
+            messageService.pinMessage(request.getRoomId(), request.getMessageId(), request.isPin());
+        } catch (IllegalStateException e) {
+            String userId = getUserIdFromPrincipal(principal);
+            String dest = "/topic/chat/" + request.getRoomId() + "/pin";
+            messagingTemplate.convertAndSend(dest, Map.of(
+                    "error", true,
+                    "message", e.getMessage() != null ? e.getMessage() : "Không thể ghim tin nhắn"
+            ));
+        }
     }
 
     @GetMapping("/api/chat/history/{roomId}")
     public ResponseEntity<PaginatedMessageResult> getChatHistory(
             @PathVariable UUID roomId,
             @RequestParam(required = false) String lastKey,
-            @RequestParam(defaultValue = "20") int limit) {
-        log.info("Fetching history for room: {}, limit: {}", roomId, limit);
+            @RequestParam(defaultValue = "20") int limit,
+            Principal principal) {
+        String currentUserId = getUserIdFromPrincipal(principal);
+        log.info("Fetching history for room: {}, limit: {}, user: {}", roomId, limit, currentUserId);
         PaginatedMessageResult result = messageService.getRoomMessages(roomId, lastKey, limit);
+        if (result.getMessages() != null) {
+            java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(result.getMessages());
+            filtered.removeIf(m ->
+                    m.isPrivacyBlocked() && !currentUserId.equals(m.getSenderId()));
+            result = new PaginatedMessageResult(filtered, result.getLastEvaluatedKey());
+        }
         return ResponseEntity.ok(result);
     }
 

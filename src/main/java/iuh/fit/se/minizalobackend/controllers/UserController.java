@@ -135,6 +135,14 @@ public class UserController {
         return ResponseEntity.ok(users);
     }
 
+    @GetMapping("/profile/{userId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<UserProfileResponse> getUserProfile(@PathVariable UUID userId) {
+        return userService.getUserById(userId)
+                .map(user -> ResponseEntity.ok(userService.mapUserToUserProfileResponse(user)))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PutMapping("/fcm-token")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
     public ResponseEntity<Void> updateFcmToken(

@@ -162,6 +162,9 @@ public class UserServiceImpl implements UserService {
         if (request.getAllowPhoneSearch() != null) {
             user.setAllowPhoneSearch(request.getAllowPhoneSearch());
         }
+        if (request.getAllowStrangerMessages() != null) {
+            user.setAllowStrangerMessages(request.getAllowStrangerMessages());
+        }
 
         return mapUserToUserProfileResponse(userRepository.save(user));
     }
@@ -261,8 +264,8 @@ public class UserServiceImpl implements UserService {
                 user.getUsername(),
                 user.getEmail(),
                 user.getDisplayName(),
-                user.getAvatarUrl(),
-                user.getCoverPhotoUrl(),
+                minioService.ensurePublicUrl(user.getAvatarUrl()),
+                minioService.ensurePublicUrl(user.getCoverPhotoUrl()),
                 user.getStatusMessage(),
                 user.getPhone(),
                 user.getGender(),
@@ -273,7 +276,8 @@ public class UserServiceImpl implements UserService {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 roleNames,
-                user.getAllowPhoneSearch());
+                user.getAllowPhoneSearch(),
+                user.getAllowStrangerMessages());
     }
 
     @Override

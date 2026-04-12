@@ -72,6 +72,9 @@ public class WebSocketIntegrationTest {
     @MockBean
     private iuh.fit.se.minizalobackend.services.AnalyticsService analyticsService;
 
+    @MockBean
+    private iuh.fit.se.minizalobackend.services.MinioService minioService;
+
     private String URL;
 
     private WebSocketStompClient stompClient;
@@ -91,6 +94,10 @@ public class WebSocketIntegrationTest {
         user.setPassword("password");
 
         org.mockito.Mockito.when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+
+        // Mock ensurePublicUrl to return the input URL (or a predictable public URL)
+        org.mockito.Mockito.when(minioService.ensurePublicUrl(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> "http://localhost:9000/test/" + invocation.getArgument(0));
     }
 
     @Test
@@ -181,7 +188,7 @@ public class WebSocketIntegrationTest {
         org.junit.jupiter.api.Assertions.assertEquals("IMAGE", receivedMessage.getType());
         org.junit.jupiter.api.Assertions.assertNotNull(receivedMessage.getAttachments());
         org.junit.jupiter.api.Assertions.assertEquals(1, receivedMessage.getAttachments().size());
-        org.junit.jupiter.api.Assertions.assertEquals("/minio/files/test.png",
+        org.junit.jupiter.api.Assertions.assertEquals("http://localhost:9000/test//minio/files/test.png",
                 receivedMessage.getAttachments().get(0).getUrl());
     }
 }

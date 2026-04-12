@@ -22,4 +22,5 @@ public class ChatRoomResponse {
     private iuh.fit.se.minizalobackend.models.MessageDynamo lastMessage;
     private int unreadCount;
     private List<RoomMemberResponse> members;
+    private boolean hasInteracted;
 }

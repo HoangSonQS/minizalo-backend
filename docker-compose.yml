@@ -81,10 +81,10 @@ services:
       - "8080:8080"
     volumes:
       - .:/app
-    command: ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.devtools.restart.enabled=false"
+    command: ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.devtools.restart.enabled=true"
     develop:
       watch:
-        - action: sync+restart
+        - action: sync
           path: ./src
           target: /app/src
         - action: rebuild
@@ -100,7 +100,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_PUBLIC_URL=http://192.168.1.58:9000
+      - MINIO_PUBLIC_URL=http://192.168.1.154:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
