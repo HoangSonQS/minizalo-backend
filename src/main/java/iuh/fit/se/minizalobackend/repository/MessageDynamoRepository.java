@@ -13,6 +13,7 @@ public interface MessageDynamoRepository {
     PaginatedMessageResult getPinnedMessagesByRoomId(String chatRoomId, String lastEvaluatedKey, int limit);
 
     long countPinnedMessages(String chatRoomId);
+    long countMessagesBySender(String chatRoomId, String senderId);
 
     iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse searchMessages(String chatRoomId, String query,
             int limit, String lastEvaluatedKey);

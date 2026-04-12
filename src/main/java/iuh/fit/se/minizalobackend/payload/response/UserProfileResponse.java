@@ -30,4 +30,5 @@ public class UserProfileResponse {
     private LocalDateTime updatedAt;
     private List<String> roles;
     private Boolean allowPhoneSearch;
+    private Boolean allowStrangerMessages;
 }

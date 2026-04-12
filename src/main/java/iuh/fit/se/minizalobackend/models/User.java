@@ -45,6 +45,7 @@ public class User {
     private Boolean accountLocked = false;
     private String fcmToken;
     private Boolean allowPhoneSearch = true; // Mặc định cho phép tìm qua SĐT
+    private Boolean allowStrangerMessages = true; // Mặc định cho phép nhận tin nhắn từ người lạ
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

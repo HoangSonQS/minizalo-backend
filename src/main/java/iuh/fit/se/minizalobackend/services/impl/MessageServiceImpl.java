@@ -50,6 +50,7 @@ public class MessageServiceImpl implements MessageService {
     private final SimpMessagingTemplate messagingTemplate;
     private final AnalyticsService analyticsService;
     private final UserRepository userRepository;
+    private final iuh.fit.se.minizalobackend.services.MinioService minioService;
 
     @Override
     @org.springframework.transaction.annotation.Transactional
@@ -104,7 +105,7 @@ public class MessageServiceImpl implements MessageService {
 
         // Broad-cast to target room
         String destination = "/topic/chat/" + targetRoomId;
-        messagingTemplate.convertAndSend(destination, forwardedMessage);
+        messagingTemplate.convertAndSend(destination, normalizeMessage(forwardedMessage));
 
         // Log activity
         analyticsService.logActivity(UUID.fromString(senderId), AppConstants.ACTIVITY_MESSAGE_FORWARDED,
@@ -123,6 +124,7 @@ public class MessageServiceImpl implements MessageService {
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
         // ── Block check for DIRECT chat rooms ──
+        boolean strangerPrivacyBlocked = false;
         String roomIdStr = request.getReceiverId();
         try {
             UUID roomUuid = UUID.fromString(roomIdStr);
@@ -150,10 +152,20 @@ public class MessageServiceImpl implements MessageService {
                                 : otherUser.getUsername();
                         throw new IllegalStateException("BLOCKED_BY_OTHER:" + blockerName);
                     }
+
+                    // --- STRANGER PRIVACY CHECK ---
+                    boolean areFriends =
+                            (senderBlockedOther.isPresent() && senderBlockedOther.get().getStatus() == EFriendStatus.ACCEPTED)
+                            || (otherBlockedSender.isPresent() && otherBlockedSender.get().getStatus() == EFriendStatus.ACCEPTED);
+
+                    if (!areFriends && Boolean.FALSE.equals(otherUser.getAllowStrangerMessages())) {
+                        strangerPrivacyBlocked = true;
+                    }
+                    // ------------------------------------------
                 }
             }
         } catch (IllegalStateException e) {
-            throw e; // re-throw block exceptions
+            throw e; // re-throw block & limit exceptions
         } catch (Exception e) {
             log.warn("Block check failed (non-critical): {}", e.getMessage());
         }
@@ -185,11 +197,20 @@ public class MessageServiceImpl implements MessageService {
         log.info("[DEBUG] ProcessMessage attachments count: {}", 
                  message.getAttachments() != null ? message.getAttachments().size() : "null");
 
+        if (strangerPrivacyBlocked) {
+            message.setPrivacyBlocked(true);
+        }
+
         saveMessage(message);
 
-        // Broadcast to room
-        String destination = "/topic/chat/" + message.getChatRoomId();
-        messagingTemplate.convertAndSend(destination, message);
+        if (strangerPrivacyBlocked) {
+            // Only send back to sender's personal queue, not the whole room
+            String senderDest = "/topic/chat/" + message.getChatRoomId() + "/" + senderId;
+            messagingTemplate.convertAndSend(senderDest, normalizeMessage(message));
+        } else {
+            String destination = "/topic/chat/" + message.getChatRoomId();
+            messagingTemplate.convertAndSend(destination, normalizeMessage(message));
+        }
 
         return message;
     }
@@ -230,11 +251,13 @@ public class MessageServiceImpl implements MessageService {
     public PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit) {
         log.info("Fetching messages from DynamoDB for room: {}, limit: {}", roomId, limit);
         PaginatedMessageResult result = messageDynamoRepository.getMessagesByRoomId(roomId.toString(), lastKey, limit);
-        log.info("Found {} messages for room {}", result.getMessages().size(), roomId);
-        if (!result.getMessages().isEmpty()) {
-             log.info("[DEBUG] History first message attachments count: {}", 
-                 result.getMessages().get(0).getAttachments() != null ? result.getMessages().get(0).getAttachments().size() : "null");
+        
+        // Normalize URLs for all messages
+        if (result.getMessages() != null) {
+            result.getMessages().forEach(this::normalizeMessage);
         }
+        
+        log.info("Found {} messages for room {}", result.getMessages().size(), roomId);
         return result;
     }
 
@@ -365,7 +388,11 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit) {
         log.info("Fetching pinned messages from DynamoDB for room: {}, limit: {}", roomId, limit);
-        return messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey, limit);
+        PaginatedMessageResult result = messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey, limit);
+        if (result.getMessages() != null) {
+            result.getMessages().forEach(this::normalizeMessage);
+        }
+        return result;
     }
 
     private String determineMessageType(ChatMessageRequest request) {
@@ -384,9 +411,26 @@ public class MessageServiceImpl implements MessageService {
         return AppConstants.MESSAGE_TYPE_DOCUMENT;
     }
 
+    private MessageDynamo normalizeMessage(MessageDynamo message) {
+        if (message == null || message.getAttachments() == null) return message;
+        message.getAttachments().forEach(attachment -> {
+            if (attachment.getUrl() != null) {
+                attachment.setUrl(minioService.ensurePublicUrl(attachment.getUrl()));
+            }
+            if (attachment.getThumbnailUrl() != null) {
+                attachment.setThumbnailUrl(minioService.ensurePublicUrl(attachment.getThumbnailUrl()));
+            }
+        });
+        return message;
+    }
+
     @Override
     public SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey) {
-        return messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey);
+        SearchMessageResponse result = messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey);
+        if (result.getMessages() != null) {
+            result.getMessages().forEach(this::normalizeMessage);
+        }
+        return result;
     }
 
     @Override
@@ -426,6 +470,8 @@ public class MessageServiceImpl implements MessageService {
         List<MessageDynamo> paged = allMatches.size() > limit
                 ? allMatches.subList(0, limit)
                 : allMatches;
+
+        paged.forEach(this::normalizeMessage);
 
         boolean hasMore = allMatches.size() > limit;
         log.info("[searchMessagesGlobal] userId={}, query='{}', found={}", userId, query, paged.size());

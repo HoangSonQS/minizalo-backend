@@ -60,9 +60,34 @@ public class MinioServiceImpl implements MinioService {
         } catch (Exception e) {
             throw new RuntimeException("Error uploading file to MinIO: " + e.getMessage(), e);
         }
-        // Return full public URL so the browser can load the file directly
+        // Trả về đường dẫn tương đối thay vì tuyệt đối để linh hoạt khi đổi IP
+        return bucketName + "/" + objectName;
+    }
+
+    @Override
+    public String ensurePublicUrl(String url) {
+        if (url == null || url.isEmpty()) return url;
+        
+        // Nếu đã là URL tuyệt đối (bắt đầu bằng http)
+        if (url.startsWith("http")) {
+            // Nếu URL chứa tên bucket, ta bóc tách phần đuôi sau bucket để gắn IP mới
+            // Ví dụ: http://old-ip:9000/minizalo-bucket/avatars/xxx.jpg -> avatars/xxx.jpg
+            String searchStr = "/" + bucketName + "/";
+            int index = url.indexOf(searchStr);
+            if (index != -1) {
+                String relativePath = url.substring(index + searchStr.length());
+                String base = minioPublicUrl.replaceAll("/$", "");
+                return base + "/" + bucketName + "/" + relativePath;
+            }
+            return url; // Không nhận diện được cấu trúc, giữ nguyên hoặc log cảnh báo
+        }
+        
+        // Nếu là đường dẫn tương đối (ví dụ: minizalo-bucket/avatars/xxx.jpg hoặc avatars/xxx.jpg)
         String base = minioPublicUrl.replaceAll("/$", "");
-        return base + "/" + bucketName + "/" + objectName;
+        if (url.startsWith(bucketName + "/")) {
+            return base + "/" + url;
+        }
+        return base + "/" + bucketName + "/" + url;
     }
 
     @Override

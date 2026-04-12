@@ -23,4 +23,5 @@ public class UserProfileUpdateRequest {
     @Size(max = 500)
     private String businessDescription;
     private Boolean allowPhoneSearch;
+    private Boolean allowStrangerMessages;
 }
