@@ -29,7 +29,8 @@ public interface MessageService {
 
     MessageDynamo processMessage(ChatMessageRequest request, String senderId);
 
-    SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey);
+    SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey,
+            String senderId, String fromDateInclusive, String toDateInclusive);
 
     /**
      * Tìm kiếm tin nhắn toàn cục trên tất cả các phòng mà userId là thành viên.

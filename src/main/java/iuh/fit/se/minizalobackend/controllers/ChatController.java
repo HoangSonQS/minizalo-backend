@@ -279,11 +279,16 @@ public class ChatController {
     @GetMapping("/api/chat/{roomId}/search")
     public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse> searchMessages(
             @PathVariable UUID roomId,
-            @RequestParam String q,
+            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "10") int limit,
-            @RequestParam(required = false) String lastKey) {
-        log.info("Searching messages in room: {}, query: {}", roomId, q);
-        return ResponseEntity.ok(messageService.searchMessages(roomId, q, limit, lastKey));
+            @RequestParam(required = false) String lastKey,
+            @RequestParam(required = false) String senderId,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate) {
+        log.info("Searching messages in room: {}, q={}, senderId={}, fromDate={}, toDate={}", roomId, q, senderId,
+                fromDate, toDate);
+        return ResponseEntity.ok(
+                messageService.searchMessages(roomId, q, limit, lastKey, senderId, fromDate, toDate));
     }
 
     /**

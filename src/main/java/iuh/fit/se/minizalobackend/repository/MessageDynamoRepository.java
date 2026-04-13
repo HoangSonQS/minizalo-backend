@@ -16,5 +16,5 @@ public interface MessageDynamoRepository {
     long countMessagesBySender(String chatRoomId, String senderId);
 
     iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse searchMessages(String chatRoomId, String query,
-            int limit, String lastEvaluatedKey);
+            int limit, String lastEvaluatedKey, String senderId, String fromDateInclusive, String toDateInclusive);
 }
