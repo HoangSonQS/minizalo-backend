@@ -139,18 +139,7 @@ public class MessageServiceImpl implements MessageService {
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
         // ── DIRECT: chặn & chính sách nhắn tin — không được nuốt exception (trước đây catch Exception làm bỏ qua cả LazyInitializationException). ──
-        boolean strangerPrivacyBlocked = false;
-        try {
-            enforceDirectChatOutgoingRules(sender, request.getReceiverId());
-        } catch (IllegalStateException ex) {
-            // Người nhận không cho người lạ nhắn tin: vẫn lưu message để client hiển thị "bị chặn",
-            // nhưng chỉ phát lại cho chính người gửi (không broadcast cả phòng).
-            if (AppConstants.STRANGER_MESSAGES_NOT_ALLOWED.equals(ex.getMessage())) {
-                strangerPrivacyBlocked = true;
-            } else {
-                throw ex;
-            }
-        }
+        enforceDirectChatOutgoingRules(sender, request.getReceiverId());
 
         if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
             boolean exists = messageDynamoRepository
@@ -179,20 +168,9 @@ public class MessageServiceImpl implements MessageService {
         log.info("[DEBUG] ProcessMessage attachments count: {}", 
                  message.getAttachments() != null ? message.getAttachments().size() : "null");
 
-        if (strangerPrivacyBlocked) {
-            message.setPrivacyBlocked(true);
-        }
-
         saveMessage(message);
-
-        if (strangerPrivacyBlocked) {
-            // Only send back to sender's personal queue, not the whole room
-            String senderDest = "/topic/chat/" + message.getChatRoomId() + "/" + senderId;
-            messagingTemplate.convertAndSend(senderDest, normalizeMessage(message));
-        } else {
-            String destination = "/topic/chat/" + message.getChatRoomId();
-            messagingTemplate.convertAndSend(destination, normalizeMessage(message));
-        }
+        String destination = "/topic/chat/" + message.getChatRoomId();
+        messagingTemplate.convertAndSend(destination, normalizeMessage(message));
 
         return message;
     }
