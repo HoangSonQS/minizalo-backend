@@ -40,6 +40,22 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
     }
 
     @Override
+    public void deleteAllByRoomId(String chatRoomId) {
+        QueryConditional queryConditional = QueryConditional
+                .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
+        var pages = messageTable.query(r -> r.queryConditional(queryConditional));
+        for (Page<MessageDynamo> page : pages) {
+            for (MessageDynamo msg : page.items()) {
+                Key key = Key.builder()
+                        .partitionValue(msg.getChatRoomId())
+                        .sortValue(msg.getCreatedAt())
+                        .build();
+                messageTable.deleteItem(key);
+            }
+        }
+    }
+
+    @Override
     public PaginatedMessageResult getMessagesByRoomId(String chatRoomId, String lastEvaluatedKey, int limit) {
         QueryConditional queryConditional = QueryConditional
                 .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());

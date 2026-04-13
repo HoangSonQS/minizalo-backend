@@ -6,6 +6,8 @@ import iuh.fit.se.minizalobackend.models.MessageDynamo;
 public interface MessageDynamoRepository {
     void save(MessageDynamo message);
 
+    void deleteAllByRoomId(String chatRoomId);
+
     PaginatedMessageResult getMessagesByRoomId(String chatRoomId, String lastEvaluatedKey, int limit);
 
     java.util.Optional<MessageDynamo> getMessage(String chatRoomId, String messageId);
