@@ -9,6 +9,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableAsync
 @EnableScheduling
 public class MiniZaloBackendApplication {
+    /**
+     * Main method to start the application.
+     * 
+     * @param args command line arguments
+     */
 
     public static void main(String[] args) {
         SpringApplication.run(MiniZaloBackendApplication.class, args);
