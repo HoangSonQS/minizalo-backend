@@ -135,6 +135,29 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
     }
 
     @Override
+    public long countMessagesBySender(String chatRoomId, String senderId) {
+        QueryConditional queryConditional = QueryConditional
+                .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
+
+        Expression filterExpression = Expression.builder()
+                .expression("senderId = :senderId")
+                .putExpressionValue(":senderId", AttributeValue.builder().s(senderId).build())
+                .build();
+
+        QueryEnhancedRequest request = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .filterExpression(filterExpression)
+                .build();
+
+        PageIterable<MessageDynamo> pages = messageTable.query(request);
+        long count = 0L;
+        for (Page<MessageDynamo> page : pages) {
+            count += page.items().size();
+        }
+        return count;
+    }
+
+    @Override
     public SearchMessageResponse searchMessages(String chatRoomId, String query, int limit, String lastEvaluatedKey) {
         QueryConditional queryConditional = QueryConditional
                 .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());

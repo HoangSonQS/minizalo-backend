@@ -35,6 +35,9 @@ class GroupServiceTest {
 
     @Mock
     private iuh.fit.se.minizalobackend.repository.GroupEventRepository groupEventRepository;
+    
+    @Mock
+    private iuh.fit.se.minizalobackend.services.MinioService minioService;
 
     @InjectMocks
     private GroupServiceImpl groupService;

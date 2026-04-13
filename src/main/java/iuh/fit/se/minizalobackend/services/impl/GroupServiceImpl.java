@@ -53,6 +53,7 @@ public class GroupServiceImpl implements GroupService {
     private final MessageService messageService;
     private final ModelMapper modelMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final iuh.fit.se.minizalobackend.services.MinioService minioService;
 
     @Override
     @Transactional
@@ -434,7 +435,7 @@ public class GroupServiceImpl implements GroupService {
                 .groupId(event.getGroup().getId())
                 .userId(event.getUser() != null ? event.getUser().getId() : null)
                 .userName(event.getUser() != null ? event.getUser().getDisplayName() : "System")
-                .userAvatar(event.getUser() != null ? event.getUser().getAvatarUrl() : null)
+                .userAvatar(event.getUser() != null ? minioService.ensurePublicUrl(event.getUser().getAvatarUrl()) : null)
                 .eventType(event.getEventType())
                 .metadata(event.getMetadata())
                 .createdAt(event.getCreatedAt())
@@ -466,6 +467,7 @@ public class GroupServiceImpl implements GroupService {
         GroupResponse response = modelMapper.map(chatRoom, GroupResponse.class);
         response.setId(chatRoom.getId().toString());
         response.setGroupName(chatRoom.getName());
+        response.setAvatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()));
         response.setOwnerId(chatRoom.getCreatedBy().getId().toString());
 
         List<GroupMemberResponse> memberResponses = roomMembers.stream()
@@ -474,7 +476,7 @@ public class GroupServiceImpl implements GroupService {
                     memberDto.setUserId(roomMember.getUser().getId().toString());
                     memberDto.setUsername(roomMember.getUser().getUsername());
                     memberDto.setDisplayName(roomMember.getUser().getDisplayName());
-                    memberDto.setAvatarUrl(roomMember.getUser().getAvatarUrl());
+                    memberDto.setAvatarUrl(minioService.ensurePublicUrl(roomMember.getUser().getAvatarUrl()));
                     memberDto.setRole(roomMember.getRole());
                     return memberDto;
                 })

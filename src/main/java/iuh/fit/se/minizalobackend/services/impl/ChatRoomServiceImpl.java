@@ -31,6 +31,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     private final GroupEventRepository groupEventRepository;
     private final UserService userService;
     private final ObjectMapper objectMapper;
+    private final iuh.fit.se.minizalobackend.services.MinioService minioService;
     private final iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository;
 
     public ChatRoomServiceImpl(ChatRoomRepository chatRoomRepository,
@@ -38,13 +39,24 @@ public class ChatRoomServiceImpl implements ChatRoomService {
             GroupEventRepository groupEventRepository,
             UserService userService,
             ObjectMapper objectMapper,
-            iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository) {
+            iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository,
+            iuh.fit.se.minizalobackend.services.MinioService minioService) {
         this.chatRoomRepository = chatRoomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.groupEventRepository = groupEventRepository;
         this.userService = userService;
         this.objectMapper = objectMapper;
         this.messageDynamoRepository = messageDynamoRepository;
+        this.minioService = minioService;
+    }
+
+    private UserResponse convertToUserResponse(User user) {
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .displayName(user.getDisplayName())
+                .avatarUrl(minioService.ensurePublicUrl(user.getAvatarUrl()))
+                .build();
     }
 
     @Override
@@ -110,7 +122,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .id(chatRoom.getId())
                 .type(chatRoom.getType())
                 .name(chatRoom.getName())
-                .avatarUrl(chatRoom.getAvatarUrl())
+                .avatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()))
                 .createdBy(convertToUserResponse(createdBy))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
@@ -343,7 +355,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .id(chatRoom.getId())
                 .type(chatRoom.getType())
                 .name(chatRoom.getName())
-                .avatarUrl(chatRoom.getAvatarUrl())
+                .avatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()))
                 .createdBy(convertToUserResponse(chatRoom.getCreatedBy()))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
@@ -486,10 +498,26 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                             room.getId().toString(), null, 1);
                     if (lastMsgResult != null && lastMsgResult.getMessages() != null 
                             && !lastMsgResult.getMessages().isEmpty()) {
-                        response.setLastMessage(lastMsgResult.getMessages().get(0));
+                        MessageDynamo lastMsg = lastMsgResult.getMessages().get(0);
+                        // Normalize attachments in last message
+                        if (lastMsg.getAttachments() != null) {
+                            lastMsg.getAttachments().forEach(a -> {
+                                if (a.getUrl() != null) a.setUrl(minioService.ensurePublicUrl(a.getUrl()));
+                                if (a.getThumbnailUrl() != null) a.setThumbnailUrl(minioService.ensurePublicUrl(a.getThumbnailUrl()));
+                            });
+                        }
+                        response.setLastMessage(lastMsg);
                     }
                 } catch (Exception ex) {
                     log.warn("Could not fetch last message for room {}: {}", room.getId(), ex.getMessage());
+                }
+
+                // Check if has interacted (sent at least one message)
+                try {
+                    long sentCount = messageDynamoRepository.countMessagesBySender(room.getId().toString(), user.getId().toString());
+                    response.setHasInteracted(sentCount > 0);
+                } catch (Exception ex) {
+                    log.warn("Could not check interaction for room {}: {}", room.getId(), ex.getMessage());
                 }
 
                 responses.add(response);
@@ -509,14 +537,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         return responses;
     }
 
-    private UserResponse convertToUserResponse(User user) {
-        return UserResponse.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .displayName(user.getDisplayName())
-                .avatarUrl(user.getAvatarUrl())
-                .build();
-    }
+// Duplicate method removed
 
     private RoomMemberResponse convertToRoomMemberResponse(RoomMember roomMember) {
         return RoomMemberResponse.builder()
