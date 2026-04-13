@@ -3,6 +3,7 @@ package iuh.fit.se.minizalobackend.services.impl;
 import iuh.fit.se.minizalobackend.dtos.request.ChangePasswordRequest;
 import iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest;
 import iuh.fit.se.minizalobackend.models.ChatRoom;
+import iuh.fit.se.minizalobackend.models.EPrivacyAudience;
 import iuh.fit.se.minizalobackend.models.ERole;
 import iuh.fit.se.minizalobackend.models.Role;
 import iuh.fit.se.minizalobackend.models.RoomMember;
@@ -162,8 +163,11 @@ public class UserServiceImpl implements UserService {
         if (request.getAllowPhoneSearch() != null) {
             user.setAllowPhoneSearch(request.getAllowPhoneSearch());
         }
-        if (request.getAllowStrangerMessages() != null) {
-            user.setAllowStrangerMessages(request.getAllowStrangerMessages());
+        if (request.getAllowMessagesFrom() != null) {
+            user.setAllowMessagesFrom(request.getAllowMessagesFrom());
+        }
+        if (request.getAllowCallsFrom() != null) {
+            user.setAllowCallsFrom(request.getAllowCallsFrom());
         }
 
         return mapUserToUserProfileResponse(userRepository.save(user));
@@ -277,7 +281,12 @@ public class UserServiceImpl implements UserService {
                 user.getUpdatedAt(),
                 roleNames,
                 user.getAllowPhoneSearch(),
-                user.getAllowStrangerMessages());
+                user.getAllowMessagesFrom() != null
+                        ? user.getAllowMessagesFrom()
+                        : EPrivacyAudience.EVERYONE,
+                user.getAllowCallsFrom() != null
+                        ? user.getAllowCallsFrom()
+                        : EPrivacyAudience.EVERYONE);
     }
 
     @Override

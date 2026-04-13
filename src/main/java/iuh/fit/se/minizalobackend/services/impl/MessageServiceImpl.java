@@ -5,6 +5,7 @@ import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
 import iuh.fit.se.minizalobackend.models.EFriendStatus;
+import iuh.fit.se.minizalobackend.models.EPrivacyAudience;
 import iuh.fit.se.minizalobackend.models.Friend;
 import iuh.fit.se.minizalobackend.models.MessageReaction;
 import iuh.fit.se.minizalobackend.models.RoomMember;
@@ -20,8 +21,8 @@ import iuh.fit.se.minizalobackend.services.UserPresenceService;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
-import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.utils.AppConstants;
+import iuh.fit.se.minizalobackend.models.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -85,6 +86,20 @@ public class MessageServiceImpl implements MessageService {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
+        UUID targetUuid = UUID.fromString(targetRoomId);
+        Optional<ChatRoom> targetRoomOpt = chatRoomRepository.findById(targetUuid);
+        if (targetRoomOpt.isPresent() && targetRoomOpt.get().getType() == ERoomType.DIRECT) {
+            List<RoomMember> tMembers = roomMemberRepository.findAllByRoomWithUsersFetched(targetRoomOpt.get());
+            Optional<User> otherOpt = tMembers.stream()
+                    .map(RoomMember::getUser)
+                    .filter(u -> !u.getId().toString().equals(senderId))
+                    .findFirst();
+            if (otherOpt.isPresent()) {
+                User recipient = userRepository.findById(otherOpt.get().getId()).orElse(otherOpt.get());
+                assertRecipientAcceptsDirectMessageFrom(sender, recipient);
+            }
+        }
+
         MessageDynamo forwardedMessage = new MessageDynamo();
         forwardedMessage.setMessageId(UUID.randomUUID().toString());
         forwardedMessage.setChatRoomId(targetRoomId);
@@ -123,52 +138,8 @@ public class MessageServiceImpl implements MessageService {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
-        // ── Block check for DIRECT chat rooms ──
-        boolean strangerPrivacyBlocked = false;
-        String roomIdStr = request.getReceiverId();
-        try {
-            UUID roomUuid = UUID.fromString(roomIdStr);
-            Optional<ChatRoom> roomOpt = chatRoomRepository.findById(roomUuid);
-            if (roomOpt.isPresent() && roomOpt.get().getType() == ERoomType.DIRECT) {
-                List<RoomMember> members = roomMemberRepository.findAllByRoom(roomOpt.get());
-                // Find the other participant
-                Optional<User> otherUserOpt = members.stream()
-                        .map(RoomMember::getUser)
-                        .filter(u -> !u.getId().toString().equals(senderId))
-                        .findFirst();
-                if (otherUserOpt.isPresent()) {
-                    User otherUser = otherUserOpt.get();
-                    // Check if sender blocked other user
-                    Optional<Friend> senderBlockedOther = friendRepository.findByUserAndFriend(sender, otherUser);
-                    if (senderBlockedOther.isPresent()
-                            && senderBlockedOther.get().getStatus() == EFriendStatus.BLOCKED) {
-                        throw new IllegalStateException("BLOCKED_BY_YOU");
-                    }
-                    // Check if other user blocked sender
-                    Optional<Friend> otherBlockedSender = friendRepository.findByUserAndFriend(otherUser, sender);
-                    if (otherBlockedSender.isPresent()
-                            && otherBlockedSender.get().getStatus() == EFriendStatus.BLOCKED) {
-                        String blockerName = otherUser.getDisplayName() != null ? otherUser.getDisplayName()
-                                : otherUser.getUsername();
-                        throw new IllegalStateException("BLOCKED_BY_OTHER:" + blockerName);
-                    }
-
-                    // --- STRANGER PRIVACY CHECK ---
-                    boolean areFriends =
-                            (senderBlockedOther.isPresent() && senderBlockedOther.get().getStatus() == EFriendStatus.ACCEPTED)
-                            || (otherBlockedSender.isPresent() && otherBlockedSender.get().getStatus() == EFriendStatus.ACCEPTED);
-
-                    if (!areFriends && Boolean.FALSE.equals(otherUser.getAllowStrangerMessages())) {
-                        strangerPrivacyBlocked = true;
-                    }
-                    // ------------------------------------------
-                }
-            }
-        } catch (IllegalStateException e) {
-            throw e; // re-throw block & limit exceptions
-        } catch (Exception e) {
-            log.warn("Block check failed (non-critical): {}", e.getMessage());
-        }
+        // ── DIRECT: chặn & chính sách nhắn tin — không được nuốt exception (trước đây catch Exception làm bỏ qua cả LazyInitializationException). ──
+        enforceDirectChatOutgoingRules(sender, request.getReceiverId());
 
         if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
             boolean exists = messageDynamoRepository
@@ -187,7 +158,7 @@ public class MessageServiceImpl implements MessageService {
         message.setContent(request.getContent());
 
         message.setAttachments(request.getAttachments());
-        message.setType(determineMessageType(request));
+        message.setType(resolveMessageType(request));
         message.setCreatedAt(Instant.now().toString());
         message.setReplyToMessageId(request.getReplyToMessageId());
         message.setRead(false);
@@ -197,20 +168,9 @@ public class MessageServiceImpl implements MessageService {
         log.info("[DEBUG] ProcessMessage attachments count: {}", 
                  message.getAttachments() != null ? message.getAttachments().size() : "null");
 
-        if (strangerPrivacyBlocked) {
-            message.setPrivacyBlocked(true);
-        }
-
         saveMessage(message);
-
-        if (strangerPrivacyBlocked) {
-            // Only send back to sender's personal queue, not the whole room
-            String senderDest = "/topic/chat/" + message.getChatRoomId() + "/" + senderId;
-            messagingTemplate.convertAndSend(senderDest, normalizeMessage(message));
-        } else {
-            String destination = "/topic/chat/" + message.getChatRoomId();
-            messagingTemplate.convertAndSend(destination, normalizeMessage(message));
-        }
+        String destination = "/topic/chat/" + message.getChatRoomId();
+        messagingTemplate.convertAndSend(destination, normalizeMessage(message));
 
         return message;
     }
@@ -395,6 +355,18 @@ public class MessageServiceImpl implements MessageService {
         return result;
     }
 
+    private String resolveMessageType(ChatMessageRequest request) {
+        if (request.getType() != null && !request.getType().isBlank()) {
+            String t = request.getType().trim().toUpperCase();
+            if (AppConstants.MESSAGE_TYPE_FOLDER.equals(t)
+                    && request.getAttachments() != null
+                    && !request.getAttachments().isEmpty()) {
+                return AppConstants.MESSAGE_TYPE_FOLDER;
+            }
+        }
+        return determineMessageType(request);
+    }
+
     private String determineMessageType(ChatMessageRequest request) {
         if (request.getAttachments() == null || request.getAttachments().isEmpty()) {
             return AppConstants.MESSAGE_TYPE_TEXT;
@@ -476,5 +448,74 @@ public class MessageServiceImpl implements MessageService {
         boolean hasMore = allMatches.size() > limit;
         log.info("[searchMessagesGlobal] userId={}, query='{}', found={}", userId, query, paged.size());
         return new SearchMessageResponse(paged, null, hasMore, paged.size());
+    }
+
+    /**
+     * Phòng DIRECT: chặn 2 chiều + {@link #assertRecipientAcceptsDirectMessageFrom}.
+     * Không bọc try/catch — mọi lỗi phải lan truyền để không gửi nhầm tin.
+     */
+    private void enforceDirectChatOutgoingRules(User sender, String roomIdStr) {
+        final UUID roomUuid;
+        try {
+            roomUuid = UUID.fromString(roomIdStr);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid chat room id");
+        }
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findById(roomUuid);
+        if (roomOpt.isEmpty() || roomOpt.get().getType() != ERoomType.DIRECT) {
+            return;
+        }
+        ChatRoom room = roomOpt.get();
+        List<RoomMember> members = roomMemberRepository.findAllByRoomWithUsersFetched(room);
+        Optional<User> otherUserOpt = members.stream()
+                .map(RoomMember::getUser)
+                .filter(u -> !u.getId().equals(sender.getId()))
+                .findFirst();
+        if (otherUserOpt.isEmpty()) {
+            return;
+        }
+        User otherUser = otherUserOpt.get();
+        Optional<Friend> senderBlockedOther = friendRepository.findByUserAndFriend(sender, otherUser);
+        if (senderBlockedOther.isPresent() && senderBlockedOther.get().getStatus() == EFriendStatus.BLOCKED) {
+            throw new IllegalStateException("BLOCKED_BY_YOU");
+        }
+        Optional<Friend> otherBlockedSender = friendRepository.findByUserAndFriend(otherUser, sender);
+        if (otherBlockedSender.isPresent() && otherBlockedSender.get().getStatus() == EFriendStatus.BLOCKED) {
+            String blockerName = otherUser.getDisplayName() != null ? otherUser.getDisplayName()
+                    : otherUser.getUsername();
+            throw new IllegalStateException("BLOCKED_BY_OTHER:" + blockerName);
+        }
+        User recipient = userRepository.findById(otherUser.getId()).orElse(otherUser);
+        assertRecipientAcceptsDirectMessageFrom(sender, recipient);
+    }
+
+    private boolean areAcceptedFriends(User a, User b) {
+        Optional<Friend> f1 = friendRepository.findByUserAndFriend(a, b);
+        if (f1.isPresent() && f1.get().getStatus() == EFriendStatus.ACCEPTED) {
+            return true;
+        }
+        Optional<Friend> f2 = friendRepository.findByUserAndFriend(b, a);
+        return f2.isPresent() && f2.get().getStatus() == EFriendStatus.ACCEPTED;
+    }
+
+    /**
+     * recipient = người nhận tin (đối phương trong phòng DIRECT). Kiểm tra allowMessagesFrom.
+     */
+    private void assertRecipientAcceptsDirectMessageFrom(User sender, User recipient) {
+        EPrivacyAudience policy = recipient.getAllowMessagesFrom() != null
+                ? recipient.getAllowMessagesFrom()
+                : EPrivacyAudience.EVERYONE;
+        if (policy == EPrivacyAudience.EVERYONE) {
+            return;
+        }
+        if (policy == EPrivacyAudience.FRIENDS) {
+            if (!areAcceptedFriends(sender, recipient)) {
+                throw new IllegalStateException(AppConstants.STRANGER_MESSAGES_NOT_ALLOWED);
+            }
+            return;
+        }
+        if (policy == EPrivacyAudience.NO_ONE) {
+            throw new IllegalStateException(AppConstants.STRANGER_MESSAGES_NOT_ALLOWED);
+        }
     }
 }

@@ -17,4 +17,7 @@ public class ChatMessageRequest {
     private List<Attachment> attachments;
 
     private String replyToMessageId;
+
+    /** Ghi đè loại tin (ví dụ FOLDER khi gửi cả thư mục một lần). Nếu null thì suy từ attachment. */
+    private String type;
 }
