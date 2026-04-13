@@ -116,14 +116,22 @@ jobs:
         aws.secretKey=test
         aws.region=us-west-2
         
-        # MinIO Configuration
+        # MinIO Configuration (publicUrl bắt buộc nếu sau này bật bean MinIO; đồng bộ với endpoint CI)
         minio.endpoint=http://localhost:9000
+        minio.publicUrl=http://localhost:9000
         minio.accessKey=test
         minio.secretKey=testtest
         minio.bucketName=test
         
+        # Agora — AgoraServiceImpl luôn load, cần placeholder (không có → ApplicationContext fail)
+        agora.appId=test-agora-app-id
+        agora.appCertificate=test-agora-app-certificate
+        
         # Firebase Configuration
         firebase.service-account.path=firebase-service-account.json
+        
+        logging.level.iuh.fit.se.minizalobackend=DEBUG
+        logging.level.org.springframework.web=INFO
         EOF
 
     - name: Run Tests
