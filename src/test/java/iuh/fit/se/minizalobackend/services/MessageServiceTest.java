@@ -139,15 +139,15 @@ class MessageServiceTest {
         SearchMessageResponse mockResponse = new SearchMessageResponse(Collections.singletonList(message), "newLastKey",
                 true, 1);
 
-        when(messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey))
+        when(messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey, null, null, null))
                 .thenReturn(mockResponse);
 
-        SearchMessageResponse result = messageService.searchMessages(roomId, query, limit, lastKey);
+        SearchMessageResponse result = messageService.searchMessages(roomId, query, limit, lastKey, null, null, null);
 
         assertNotNull(result);
         assertEquals(1, result.getMessages().size());
         assertEquals("newLastKey", result.getLastKey());
-        verify(messageDynamoRepository).searchMessages(roomId.toString(), query, limit, lastKey);
+        verify(messageDynamoRepository).searchMessages(roomId.toString(), query, limit, lastKey, null, null, null);
     }
 
     @Test

@@ -134,6 +134,13 @@
             <version>8.5.1</version>
         </dependency>
 
+        <!-- HTML fetch / OG tags for link preview -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.17.2</version>
+        </dependency>
+
         <!-- Springdoc OpenAPI UI (Compatible with Spring Boot 3) -->
         <dependency>
             <groupId>org.springdoc</groupId>

@@ -16,12 +16,14 @@ import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryEnhancedRequest;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Repository
 public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
@@ -158,14 +160,42 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
     }
 
     @Override
-    public SearchMessageResponse searchMessages(String chatRoomId, String query, int limit, String lastEvaluatedKey) {
+    public SearchMessageResponse searchMessages(String chatRoomId, String query, int limit, String lastEvaluatedKey,
+            String senderId, String fromDateInclusive, String toDateInclusive) {
         QueryConditional queryConditional = QueryConditional
                 .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
 
-        Expression filterExpression = Expression.builder()
-                .expression("contains(content, :query)")
-                .putExpressionValue(":query", AttributeValue.builder().s(query).build())
-                .build();
+        boolean hasQuery = query != null && !query.isBlank();
+        boolean hasSender = senderId != null && !senderId.isBlank();
+        boolean hasFrom = fromDateInclusive != null && !fromDateInclusive.isBlank();
+        boolean hasTo = toDateInclusive != null && !toDateInclusive.isBlank();
+
+        if (!hasQuery && !hasSender && !hasFrom && !hasTo) {
+            return new SearchMessageResponse(Collections.emptyList(), null, false, 0);
+        }
+
+        List<String> parts = new ArrayList<>();
+        Expression.Builder exprBuilder = Expression.builder();
+
+        if (hasQuery) {
+            parts.add("contains(content, :query)");
+            exprBuilder.putExpressionValue(":query", AttributeValue.builder().s(query.trim()).build());
+        }
+        if (hasSender) {
+            parts.add("senderId = :senderId");
+            exprBuilder.putExpressionValue(":senderId", AttributeValue.builder().s(senderId.trim()).build());
+        }
+        if (hasFrom) {
+            parts.add("createdAt >= :fromDate");
+            exprBuilder.putExpressionValue(":fromDate", AttributeValue.builder().s(fromDateInclusive.trim()).build());
+        }
+        if (hasTo) {
+            parts.add("createdAt <= :toDate");
+            exprBuilder.putExpressionValue(":toDate", AttributeValue.builder().s(toDateInclusive.trim()).build());
+        }
+
+        exprBuilder.expression(parts.stream().collect(Collectors.joining(" AND ")));
+        Expression filterExpression = exprBuilder.build();
 
         QueryEnhancedRequest.Builder requestBuilder = QueryEnhancedRequest.builder()
                 .queryConditional(queryConditional)

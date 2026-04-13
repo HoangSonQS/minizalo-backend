@@ -397,8 +397,10 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey) {
-        SearchMessageResponse result = messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey);
+    public SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey,
+            String senderId, String fromDateInclusive, String toDateInclusive) {
+        SearchMessageResponse result = messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey,
+                senderId, fromDateInclusive, toDateInclusive);
         if (result.getMessages() != null) {
             result.getMessages().forEach(this::normalizeMessage);
         }
@@ -425,7 +427,7 @@ public class MessageServiceImpl implements MessageService {
             try {
                 String roomId = membership.getRoom().getId().toString();
                 SearchMessageResponse roomResult = messageDynamoRepository
-                        .searchMessages(roomId, query, perRoomLimit, null);
+                        .searchMessages(roomId, query, perRoomLimit, null, null, null, null);
                 allMatches.addAll(roomResult.getMessages());
             } catch (Exception e) {
                 log.warn("[searchMessagesGlobal] Error searching room: {}", e.getMessage());
