@@ -17,4 +17,6 @@ public class ChatMessageRequest {
     private List<Attachment> attachments;
 
     private String replyToMessageId;
+
+    private String type;
 }

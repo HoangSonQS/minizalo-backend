@@ -1,5 +1,6 @@
 package iuh.fit.se.minizalobackend.config;
 
+import iuh.fit.se.minizalobackend.security.CustomHandshakeHandler;
 import iuh.fit.se.minizalobackend.security.WebSocketAuthInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -16,9 +17,12 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketAuthInterceptor webSocketAuthInterceptor;
+    private final CustomHandshakeHandler customHandshakeHandler;
 
-    public WebSocketConfig(WebSocketAuthInterceptor webSocketAuthInterceptor) {
+    public WebSocketConfig(WebSocketAuthInterceptor webSocketAuthInterceptor, 
+                           CustomHandshakeHandler customHandshakeHandler) {
         this.webSocketAuthInterceptor = webSocketAuthInterceptor;
+        this.customHandshakeHandler = customHandshakeHandler;
     }
 
     @Override
@@ -30,14 +34,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // SockJS endpoint (for clients that need SockJS transport)
+        // SockJS endpoint
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
+                .setHandshakeHandler(customHandshakeHandler)
                 .withSockJS();
 
-        // Raw WebSocket endpoint (for React Native and browser clients that support native WebSocket)
+        // Raw WebSocket endpoint
         registry.addEndpoint("/ws-raw")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns("*")
+                .setHandshakeHandler(customHandshakeHandler);
     }
 
     @Override
