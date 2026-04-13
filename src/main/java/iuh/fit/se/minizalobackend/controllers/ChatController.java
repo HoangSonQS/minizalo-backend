@@ -77,7 +77,7 @@ public class ChatController {
                     Map<String, String> err = new LinkedHashMap<>();
                     err.put("code", AppConstants.STRANGER_MESSAGES_NOT_ALLOWED);
                     err.put("roomId", chatMessageRequest.getReceiverId());
-                    err.put("text", "Người này không nhận tin nhắn từ người lạ");
+                    err.put("text", "Người này hiện không nhận tin nhắn từ người lạ");
                     String json = objectMapper.writeValueAsString(err);
                     messagingTemplate.convertAndSendToUser(username, "/queue/chat-errors", json);
                 } catch (JsonProcessingException jpe) {
@@ -143,7 +143,6 @@ public class ChatController {
         try {
             messageService.pinMessage(request.getRoomId(), request.getMessageId(), request.isPin());
         } catch (IllegalStateException e) {
-            String userId = getUserIdFromPrincipal(principal);
             String dest = "/topic/chat/" + request.getRoomId() + "/pin";
             messagingTemplate.convertAndSend(dest, Map.of(
                     "error", true,
@@ -199,7 +198,19 @@ public class ChatController {
             Principal principal) {
         String senderId = getUserIdFromPrincipal(principal);
         log.info("REST send message from user: {} to room: {}", senderId, chatMessageRequest.getReceiverId());
-        MessageDynamo message = messageService.processMessage(chatMessageRequest, senderId);
+        MessageDynamo message;
+        try {
+            message = messageService.processMessage(chatMessageRequest, senderId);
+        } catch (IllegalStateException ex) {
+            if (AppConstants.STRANGER_MESSAGES_NOT_ALLOWED.equals(ex.getMessage())) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("code", AppConstants.STRANGER_MESSAGES_NOT_ALLOWED);
+                err.put("roomId", chatMessageRequest.getReceiverId());
+                err.put("message", "Người này hiện không nhận tin nhắn từ người lạ");
+                return ResponseEntity.status(403).body(err);
+            }
+            throw ex;
+        }
         
         // Convert to Map to avoid ClassCastException with Spring DevTools RestartClassLoader
         Map<String, Object> response = new java.util.HashMap<>();
