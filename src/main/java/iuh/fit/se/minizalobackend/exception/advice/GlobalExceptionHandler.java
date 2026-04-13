@@ -1,11 +1,13 @@
 package iuh.fit.se.minizalobackend.exception.advice;
 
 import iuh.fit.se.minizalobackend.exception.TokenRefreshException;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException; // Add this import
 import org.springframework.security.authentication.LockedException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -78,6 +80,17 @@ public class GlobalExceptionHandler {
                 .body(errorDetails);
     }
 
+    @ExceptionHandler(UsernameNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleUsernameNotFoundException(UsernameNotFoundException ex) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("timestamp", LocalDateTime.now());
+        errorDetails.put("status", HttpStatus.NOT_FOUND.value());
+        errorDetails.put("message", ex.getMessage() != null ? ex.getMessage() : "User not found");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
+    }
+
     @ExceptionHandler(LockedException.class)
     public ResponseEntity<Map<String, Object>> handleLockedException(LockedException ex) {
         Map<String, Object> errorDetails = new HashMap<>();
@@ -97,6 +110,27 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
     public ResponseEntity<Void> handleNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
         return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex) {
+        if (AppConstants.STRANGER_MESSAGES_NOT_ALLOWED.equals(ex.getMessage())) {
+            Map<String, Object> errorDetails = new HashMap<>();
+            errorDetails.put("timestamp", LocalDateTime.now());
+            errorDetails.put("status", HttpStatus.FORBIDDEN.value());
+            errorDetails.put("code", AppConstants.STRANGER_MESSAGES_NOT_ALLOWED);
+            errorDetails.put("message", "Người này không nhận tin nhắn từ người lạ");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(errorDetails);
+        }
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("timestamp", LocalDateTime.now());
+        errorDetails.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        errorDetails.put("message", ex.getMessage() != null ? ex.getMessage() : "Illegal state");
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
     }
 
     @ExceptionHandler(Exception.class)

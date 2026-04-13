@@ -17,4 +17,7 @@ public class FriendResponse {
     private UserProfileResponse friend;
     private EFriendStatus status;
     private LocalDateTime createdAt;
+    private String inviteMessage;
+    private String inviteSource;
+    private Boolean hideMyTimelineFromFriend;
 }

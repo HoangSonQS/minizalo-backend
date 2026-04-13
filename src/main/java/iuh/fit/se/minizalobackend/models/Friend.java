@@ -32,8 +32,33 @@ public class Friend {
 
     private LocalDateTime createdAt;
 
+    /** Lời giới thiệu kèm lời mời (tối đa 150 ký tự), chỉ dùng khi PENDING. */
+    @Column(length = 150)
+    private String inviteMessage;
+
+    /** Ví dụ: CHAT_WINDOW, PHONE_SEARCH — hiển thị cho người nhận. */
+    @Column(length = 32)
+    private String inviteSource;
+
+    /**
+     * Người gửi chọn: ẩn nhật ký của mình với người nhận (tùy chọn kiểu Zalo).
+     * Dùng {@link Boolean} (nullable): bản ghi cũ / cột NULL trong DB sẽ không làm crash khi đọc (primitive boolean + NULL → lỗi runtime).
+     */
+    @Column(name = "hide_my_timeline_from_friend")
+    private Boolean hideMyTimelineFromFriend;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        if (hideMyTimelineFromFriend == null) {
+            hideMyTimelineFromFriend = false;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        if (hideMyTimelineFromFriend == null) {
+            hideMyTimelineFromFriend = false;
+        }
     }
 }

@@ -1,5 +1,6 @@
 package iuh.fit.se.minizalobackend.services.impl;
 
+import iuh.fit.se.minizalobackend.payload.response.AcceptFriendRequestResponse;
 import iuh.fit.se.minizalobackend.payload.response.FriendResponse;
 import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
 import iuh.fit.se.minizalobackend.models.EFriendStatus;
@@ -13,6 +14,7 @@ import iuh.fit.se.minizalobackend.services.UserService;
 import lombok.RequiredArgsConstructor;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
+import iuh.fit.se.minizalobackend.payload.request.FriendRequest;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -34,9 +36,21 @@ public class FriendServiceImpl implements FriendService {
     private final ChatRoomService chatRoomService;
     private final MessageService messageService;
 
+    private static String normalizeInviteSource(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "UNKNOWN";
+        }
+        String u = raw.trim().toUpperCase();
+        if ("CHAT_WINDOW".equals(u) || "PHONE_SEARCH".equals(u)) {
+            return u;
+        }
+        return "UNKNOWN";
+    }
+
     @Override
     @Transactional
-    public FriendResponse sendFriendRequest(UUID senderId, UUID receiverId) {
+    public FriendResponse sendFriendRequest(UUID senderId, FriendRequest request) {
+        UUID receiverId = request.getFriendId();
         if (senderId.equals(receiverId)) {
             throw new IllegalArgumentException("Cannot send friend request to self.");
         }
@@ -46,7 +60,6 @@ public class FriendServiceImpl implements FriendService {
         User receiver = userService.getUserById(receiverId)
                 .orElseThrow(() -> new UsernameNotFoundException("Receiver not found with id: " + receiverId));
 
-        // Check if a request already exists or they are already friends
         Optional<Friend> existingFriendship = friendRepository.findByUserAndFriend(sender, receiver);
         if (existingFriendship.isPresent()) {
             throw new IllegalStateException("Friend request already sent or they are already friends.");
@@ -58,13 +71,23 @@ public class FriendServiceImpl implements FriendService {
             throw new IllegalStateException("You have a pending friend request from this user. Accept it instead.");
         }
 
-        Friend friendRequest = new Friend(null, sender, receiver, EFriendStatus.PENDING, null);
+        String msg = request.getInviteMessage() == null ? null : request.getInviteMessage().trim();
+        if (msg != null && msg.isEmpty()) {
+            msg = null;
+        }
+        if (msg != null && msg.length() > 150) {
+            msg = msg.substring(0, 150);
+        }
+        String src = normalizeInviteSource(request.getInviteSource());
+        boolean hideTimeline = Boolean.TRUE.equals(request.getHideMyTimelineFromFriend());
+
+        Friend friendRequest = new Friend(null, sender, receiver, EFriendStatus.PENDING, null, msg, src, hideTimeline);
         return mapFriendToFriendResponse(friendRepository.save(friendRequest));
     }
 
     @Override
     @Transactional
-    public FriendResponse acceptFriendRequest(UUID currentUserId, UUID requestId) {
+    public AcceptFriendRequestResponse acceptFriendRequest(UUID currentUserId, UUID requestId) {
         Friend friendRequest = friendRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Friend request not found."));
 
@@ -80,20 +103,19 @@ public class FriendServiceImpl implements FriendService {
 
         // Create a reciprocal friendship for the sender
         Friend reciprocalFriendship = new Friend(null, friendRequest.getFriend(), friendRequest.getUser(),
-                EFriendStatus.ACCEPTED, null);
+                EFriendStatus.ACCEPTED, null, null, null, false);
         friendRepository.save(reciprocalFriendship);
 
         // Create direct chat room
-        iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse room =
-                chatRoomService.createDirectChat(friendRequest.getUser(), friendRequest.getFriend());
-
-        // Send automatic Hello message
+        iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse room = chatRoomService
+                .createDirectChat(friendRequest.getUser(), friendRequest.getFriend());
         ChatMessageRequest helloRequest = new ChatMessageRequest();
         helloRequest.setReceiverId(room.getId().toString());
         helloRequest.setContent("Hello");
         messageService.processMessage(helloRequest, friendRequest.getFriend().getId().toString());
 
-        return mapFriendToFriendResponse(acceptedRequest);
+        return new AcceptFriendRequestResponse(mapFriendToFriendResponse(acceptedRequest), room);
+
     }
 
     @Override
@@ -136,9 +158,11 @@ public class FriendServiceImpl implements FriendService {
     @Override
     @Transactional(readOnly = true)
     public List<FriendResponse> getFriendsList(UUID userId) {
+        //
         User currentUser = userService.getUserById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
-        // Danh bạ cần hiển thị cả bạn bè đang ACCEPTED lẫn những người đã bị chặn tin nhắn
+        // Danh bạ cần hiển thị cả bạn bè đang ACCEPTED lẫn những người đã bị chặn tin
+        // nhắn
         // (BLOCKED) để chặn chỉ ảnh hưởng tới chat, không làm mất bạn khỏi danh sách.
         var accepted = friendRepository.findByUserAndStatus(currentUser, EFriendStatus.ACCEPTED);
         var blocked = friendRepository.findByUserAndStatus(currentUser, EFriendStatus.BLOCKED);
@@ -214,8 +238,7 @@ public class FriendServiceImpl implements FriendService {
             existingBlock.get().setStatus(EFriendStatus.BLOCKED);
             friendRepository.save(existingBlock.get());
         } else {
-            // Create a new block entry
-            Friend blockEntry = new Friend(null, blocker, blocked, EFriendStatus.BLOCKED, null);
+            Friend blockEntry = new Friend(null, blocker, blocked, EFriendStatus.BLOCKED, null, null, null, false);
             friendRepository.save(blockEntry);
         }
         // NOTE: We do NOT delete the reverse friendship entry (blocked -> blocker)
@@ -264,11 +287,17 @@ public class FriendServiceImpl implements FriendService {
     // This method is private and not part of the interface, but it needs to use the
     // correct UserResponse
     private FriendResponse mapFriendToFriendResponse(Friend friend) {
-        UserProfileResponse user = userService.mapUserToUserProfileResponse(friend.getUser()); // Changed to
-                                                                                               // UserProfileResponse
-        UserProfileResponse friendUser = userService.mapUserToUserProfileResponse(friend.getFriend()); // Changed to
-                                                                                                       // UserProfileResponse
-        return new FriendResponse(friend.getId(), user, friendUser, friend.getStatus(), friend.getCreatedAt());
+        UserProfileResponse user = userService.mapUserToUserProfileResponse(friend.getUser());
+        UserProfileResponse friendUser = userService.mapUserToUserProfileResponse(friend.getFriend());
+        return new FriendResponse(
+                friend.getId(),
+                user,
+                friendUser,
+                friend.getStatus(),
+                friend.getCreatedAt(),
+                friend.getInviteMessage(),
+                friend.getInviteSource(),
+                Boolean.TRUE.equals(friend.getHideMyTimelineFromFriend()));
     }
 
     @Override

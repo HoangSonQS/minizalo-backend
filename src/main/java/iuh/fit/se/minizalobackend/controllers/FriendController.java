@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.payload.request.FriendRequest;
+import iuh.fit.se.minizalobackend.payload.response.AcceptFriendRequestResponse;
 import iuh.fit.se.minizalobackend.payload.response.FriendResponse;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
@@ -31,7 +32,7 @@ public class FriendController {
             @AuthenticationPrincipal UserDetailsImpl userDetails,
             @Valid @RequestBody FriendRequest request) {
         try {
-            FriendResponse response = friendService.sendFriendRequest(userDetails.getId(), request.getFriendId());
+            FriendResponse response = friendService.sendFriendRequest(userDetails.getId(), request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
@@ -44,7 +45,7 @@ public class FriendController {
             @AuthenticationPrincipal UserDetailsImpl userDetails,
             @PathVariable UUID requestId) {
         try {
-            FriendResponse response = friendService.acceptFriendRequest(userDetails.getId(), requestId);
+            AcceptFriendRequestResponse response = friendService.acceptFriendRequest(userDetails.getId(), requestId);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
