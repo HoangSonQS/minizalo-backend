@@ -46,6 +46,14 @@ public class User {
     private String fcmToken;
     private Boolean allowPhoneSearch = true; // Mặc định cho phép tìm qua SĐT
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "allow_messages_from", length = 20)
+    private EPrivacyAudience allowMessagesFrom = EPrivacyAudience.EVERYONE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "allow_calls_from", length = 20)
+    private EPrivacyAudience allowCallsFrom = EPrivacyAudience.EVERYONE;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

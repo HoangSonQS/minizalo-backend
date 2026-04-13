@@ -18,12 +18,20 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 import iuh.fit.se.minizalobackend.services.ChatRoomService;
 import iuh.fit.se.minizalobackend.services.UserService;
+import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.security.Principal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,12 +45,14 @@ public class ChatController {
     private final SimpMessagingTemplate messagingTemplate;
     private final ChatRoomService chatRoomService;
     private final UserService userService;
+    private final ObjectMapper objectMapper;
 
-    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate, ChatRoomService chatRoomService, UserService userService) {
+    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate, ChatRoomService chatRoomService, UserService userService, ObjectMapper objectMapper) {
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
         this.chatRoomService = chatRoomService;
         this.userService = userService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/api/chat/rooms")
@@ -57,7 +67,27 @@ public class ChatController {
     public void sendMessage(@Payload @Valid ChatMessageRequest chatMessageRequest, Principal principal) {
         String senderId = getUserIdFromPrincipal(principal);
         log.info("Received message from user: {} to room: {}", senderId, chatMessageRequest.getReceiverId());
-        messageService.processMessage(chatMessageRequest, senderId);
+        try {
+            messageService.processMessage(chatMessageRequest, senderId);
+        } catch (IllegalStateException ex) {
+            if (AppConstants.STRANGER_MESSAGES_NOT_ALLOWED.equals(ex.getMessage())) {
+                String username = getUsernameFromPrincipal(principal);
+                // Phải gửi chuỗi JSON: Map gốc dễ bị convert sang dạng không parse được ở @stomp/stompjs → client không gỡ tin temp-.
+                try {
+                    Map<String, String> err = new LinkedHashMap<>();
+                    err.put("code", AppConstants.STRANGER_MESSAGES_NOT_ALLOWED);
+                    err.put("roomId", chatMessageRequest.getReceiverId());
+                    err.put("text", "Người này không nhận tin nhắn từ người lạ");
+                    String json = objectMapper.writeValueAsString(err);
+                    messagingTemplate.convertAndSendToUser(username, "/queue/chat-errors", json);
+                } catch (JsonProcessingException jpe) {
+                    log.error("serialize chat-errors", jpe);
+                }
+                log.debug("Rejected DM: stranger policy, room {}", chatMessageRequest.getReceiverId());
+            } else {
+                throw ex;
+            }
+        }
     }
 
     @MessageMapping("/chat.typing")
@@ -180,14 +210,23 @@ public class ChatController {
         if (principal == null) {
             throw new IllegalStateException("WebSocket session not authenticated – JWT may be expired or missing");
         }
-        if (principal instanceof org.springframework.security.authentication.UsernamePasswordAuthenticationToken) {
-            Object p = ((org.springframework.security.authentication.UsernamePasswordAuthenticationToken) principal)
-                    .getPrincipal();
-            if (p instanceof iuh.fit.se.minizalobackend.security.services.UserDetailsImpl) {
-                return ((iuh.fit.se.minizalobackend.security.services.UserDetailsImpl) p).getId().toString();
+        if (principal instanceof UsernamePasswordAuthenticationToken) {
+            Object p = ((UsernamePasswordAuthenticationToken) principal).getPrincipal();
+            if (p instanceof UserDetailsImpl) {
+                return ((UserDetailsImpl) p).getId().toString();
             }
         }
         return principal.getName();
+    }
+
+    private String getUsernameFromPrincipal(Principal principal) {
+        if (principal instanceof UsernamePasswordAuthenticationToken) {
+            Object p = ((UsernamePasswordAuthenticationToken) principal).getPrincipal();
+            if (p instanceof UserDetailsImpl) {
+                return ((UserDetailsImpl) p).getUsername();
+            }
+        }
+        throw new IllegalStateException("Cannot resolve username for WebSocket principal");
     }
 
     @PostMapping("/api/chat/forward")
