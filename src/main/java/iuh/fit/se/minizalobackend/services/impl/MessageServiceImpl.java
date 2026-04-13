@@ -54,6 +54,12 @@ public class MessageServiceImpl implements MessageService {
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
 
     @Override
+    public void deleteAllMessages(String chatRoomId) {
+        log.info("Deleting all messages for room: {}", chatRoomId);
+        messageDynamoRepository.deleteAllByRoomId(chatRoomId);
+    }
+
+    @Override
     @org.springframework.transaction.annotation.Transactional
     public MessageDynamo saveMessage(MessageDynamo message) {
         // Ensure required fields are set before saving
@@ -66,12 +72,16 @@ public class MessageServiceImpl implements MessageService {
         log.debug("Saving message to DynamoDB for chat room: {}", message.getChatRoomId());
         messageDynamoRepository.save(message);
 
-        // Log activity
-        analyticsService.logActivity(UUID.fromString(message.getSenderId()), AppConstants.ACTIVITY_MESSAGE_SENT,
-                "Message sent to room: " + message.getChatRoomId());
+        // Log activity (skip for SYSTEM messages)
+        if (!"SYSTEM".equals(message.getSenderId())) {
+            analyticsService.logActivity(UUID.fromString(message.getSenderId()), AppConstants.ACTIVITY_MESSAGE_SENT,
+                    "Message sent to room: " + message.getChatRoomId());
+        }
 
-        // Trigger notifications for offline members
-        triggerNotifications(message);
+        // Trigger notifications for offline members (skip for SYSTEM messages)
+        if (!"SYSTEM".equals(message.getSenderId())) {
+            triggerNotifications(message);
+        }
 
         return message;
     }

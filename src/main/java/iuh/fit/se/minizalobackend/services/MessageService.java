@@ -9,6 +9,8 @@ import java.util.UUID;
 public interface MessageService {
     MessageDynamo saveMessage(MessageDynamo message);
 
+    void deleteAllMessages(String chatRoomId);
+
     PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit);
 
     void recallMessage(String chatRoomId, String messageId);

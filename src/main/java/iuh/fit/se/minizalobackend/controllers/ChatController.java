@@ -151,6 +151,16 @@ public class ChatController {
         }
     }
 
+    @DeleteMapping("/api/chat/history/{roomId}")
+    public ResponseEntity<Void> clearChatHistory(
+            @PathVariable UUID roomId,
+            Principal principal) {
+        String currentUserId = getUserIdFromPrincipal(principal);
+        log.info("User {} clearing history for room: {}", currentUserId, roomId);
+        messageService.deleteAllMessages(roomId.toString());
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/api/chat/history/{roomId}")
     public ResponseEntity<PaginatedMessageResult> getChatHistory(
             @PathVariable UUID roomId,
