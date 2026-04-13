@@ -109,8 +109,11 @@ public class WebSocketIntegrationTest {
         String token = jwtTokenProvider.generateAccessToken("7927515e-6531-487d-8153-6591739c9f0b");
         connectHeaders.add("Authorization", "Bearer " + token);
 
+        // CustomHandshakeHandler extracts JWT from query param "token" during handshake
+        String connectUrl = URL + "?token=" + token;
+
         StompSession session = stompClient
-                .connectAsync(URL, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
+                .connectAsync(connectUrl, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
                 })
                 .get(1, TimeUnit.SECONDS);
 
@@ -146,8 +149,11 @@ public class WebSocketIntegrationTest {
         String token = jwtTokenProvider.generateAccessToken("7927515e-6531-487d-8153-6591739c9f0b");
         connectHeaders.add("Authorization", "Bearer " + token);
 
+        // CustomHandshakeHandler extracts JWT from query param "token" during handshake
+        String connectUrl = URL + "?token=" + token;
+
         StompSession session = stompClient
-                .connectAsync(URL, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
+                .connectAsync(connectUrl, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
                 })
                 .get(1, TimeUnit.SECONDS);
 
