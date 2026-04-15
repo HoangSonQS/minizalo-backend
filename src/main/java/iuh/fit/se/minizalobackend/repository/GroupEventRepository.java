@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface GroupEventRepository extends JpaRepository<GroupEvent, UUID> {
     List<GroupEvent> findByGroupIdOrderByCreatedAtDesc(UUID groupId);
+    void deleteAllByGroup(iuh.fit.se.minizalobackend.models.ChatRoom group);
 }

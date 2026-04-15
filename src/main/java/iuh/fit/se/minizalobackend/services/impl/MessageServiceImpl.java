@@ -350,6 +350,11 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void pinMessage(String chatRoomId, String messageId, boolean pin) {
+        pinMessage(chatRoomId, messageId, pin, null, null);
+    }
+
+    @Override
+    public void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType) {
         messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
             if (pin && !message.isPinned()) {
                 long pinnedCount = messageDynamoRepository.countPinnedMessages(chatRoomId);
@@ -360,13 +365,45 @@ public class MessageServiceImpl implements MessageService {
             message.setPinned(pin);
             messageDynamoRepository.save(message);
 
-            // Broadcast pin event
-            String destination = "/topic/chat/" + chatRoomId + "/pin";
-            messagingTemplate.convertAndSend(destination, Map.of(
+            // Broadcast pin event (trạng thái ghim)
+            String pinDestination = "/topic/chat/" + chatRoomId + "/pin";
+            messagingTemplate.convertAndSend(pinDestination, Map.of(
                     "messageId", messageId,
                     "isPinned", pin));
 
-            log.info("Message {} {} in room {}", messageId, pin ? "pinned" : "unpinned", chatRoomId);
+            // Broadcast system message vào channel chat chính để cả 2 phía thấy thông báo
+            String actor = (actorName != null && !actorName.isBlank()) ? actorName : "Ai đó";
+            String msgType = (messageType != null && !messageType.isBlank()) ? messageType.toUpperCase() : "TEXT";
+            String typeLabel;
+            switch (msgType) {
+                case "IMAGE": typeLabel = "hình ảnh"; break;
+                case "VIDEO": typeLabel = "video"; break;
+                case "FILE": typeLabel = "file"; break;
+                case "LINK": typeLabel = "link"; break;
+                default: typeLabel = "văn bản"; break;
+            }
+            String content = pin
+                    ? actor + " đã ghim 1 tin nhắn " + typeLabel + "."
+                    : actor + " đã bỏ ghim 1 tin nhắn " + typeLabel + ".";
+
+            MessageDynamo sysMsg = new MessageDynamo();
+            sysMsg.setMessageId(java.util.UUID.randomUUID().toString());
+            sysMsg.setChatRoomId(chatRoomId);
+            sysMsg.setSenderId("system");
+            sysMsg.setSenderName("Hệ thống");
+            sysMsg.setContent(content);
+            sysMsg.setType("PIN_NOTIFICATION");
+            sysMsg.setCreatedAt(java.time.Instant.now().toString());
+            sysMsg.setReplyToMessageId(pin ? messageId : null); // link đến tin nhắn được ghim khi pin
+            sysMsg.setRead(false);
+            sysMsg.setReadBy(new ArrayList<>());
+            sysMsg.setReactions(new ArrayList<>());
+            messageDynamoRepository.save(sysMsg);
+
+            String chatDestination = "/topic/chat/" + chatRoomId;
+            messagingTemplate.convertAndSend(chatDestination, sysMsg);
+
+            log.info("Message {} {} in room {} by {}", messageId, pin ? "pinned" : "unpinned", chatRoomId, actor);
         });
     }
 
