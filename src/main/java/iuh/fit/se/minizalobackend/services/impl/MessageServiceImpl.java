@@ -78,8 +78,8 @@ public class MessageServiceImpl implements MessageService {
                     "Message sent to room: " + message.getChatRoomId());
         }
 
-        // Trigger notifications for offline members (skip for SYSTEM messages)
-        if (!"SYSTEM".equals(message.getSenderId())) {
+        // Trigger notifications for offline members (skip for SYSTEM/privacy-blocked messages)
+        if (!"SYSTEM".equals(message.getSenderId()) && !message.isPrivacyBlocked()) {
             triggerNotifications(message);
         }
 
@@ -148,8 +148,17 @@ public class MessageServiceImpl implements MessageService {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
-        // ── DIRECT: chặn & chính sách nhắn tin — không được nuốt exception (trước đây catch Exception làm bỏ qua cả LazyInitializationException). ──
-        enforceDirectChatOutgoingRules(sender, request.getReceiverId());
+        // DIRECT: chặn 2 chiều vẫn throw; riêng policy người lạ thì lưu tin phía người gửi + đánh dấu privacyBlocked.
+        boolean strangerPrivacyBlocked = false;
+        try {
+            enforceDirectChatOutgoingRules(sender, request.getReceiverId());
+        } catch (IllegalStateException ex) {
+            if (AppConstants.STRANGER_MESSAGES_NOT_ALLOWED.equals(ex.getMessage())) {
+                strangerPrivacyBlocked = true;
+            } else {
+                throw ex;
+            }
+        }
 
         if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
             boolean exists = messageDynamoRepository
@@ -174,13 +183,19 @@ public class MessageServiceImpl implements MessageService {
         message.setRead(false);
         message.setReadBy(new ArrayList<>());
         message.setReactions(new ArrayList<>());
+        message.setPrivacyBlocked(strangerPrivacyBlocked);
 
         log.info("[DEBUG] ProcessMessage attachments count: {}", 
                  message.getAttachments() != null ? message.getAttachments().size() : "null");
 
         saveMessage(message);
-        String destination = "/topic/chat/" + message.getChatRoomId();
-        messagingTemplate.convertAndSend(destination, normalizeMessage(message));
+        if (strangerPrivacyBlocked) {
+            String senderDest = "/topic/chat/" + message.getChatRoomId() + "/" + senderId;
+            messagingTemplate.convertAndSend(senderDest, normalizeMessage(message));
+        } else {
+            String destination = "/topic/chat/" + message.getChatRoomId();
+            messagingTemplate.convertAndSend(destination, normalizeMessage(message));
+        }
 
         return message;
     }
