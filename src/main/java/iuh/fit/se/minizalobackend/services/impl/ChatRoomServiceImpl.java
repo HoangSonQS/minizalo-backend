@@ -580,4 +580,46 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         }
         return response;
     }
+
+    @Override
+    @Transactional
+    public void deleteChatRoom(UUID roomId, User actor) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new iuh.fit.se.minizalobackend.exception.custom.ChatRoomNotFoundException(
+                        "Room with ID " + roomId + " not found."));
+
+        // Kiểm tra actor có là thành viên không
+        RoomMember membership = roomMemberRepository.findByRoomAndUser(room, actor)
+                .orElseThrow(() -> new iuh.fit.se.minizalobackend.exception.custom.UnauthorizedRoomAccessException(
+                        "You are not a member of this room."));
+
+        // Xóa toàn bộ tin nhắn trong phòng khỏi DynamoDB
+        try {
+            messageDynamoRepository.deleteAllByRoomId(roomId.toString());
+            log.info("Deleted all messages for room {} by user {}", roomId, actor.getUsername());
+        } catch (Exception ex) {
+            log.warn("Could not delete messages for room {}: {}", roomId, ex.getMessage());
+        }
+
+        if (room.getType() == iuh.fit.se.minizalobackend.models.ERoomType.DIRECT) {
+            // Đối với chat trực tiếp, xóa toàn bộ members và room để reset hoàn toàn
+            List<iuh.fit.se.minizalobackend.models.RoomMember> allMembers = roomMemberRepository.findAllByRoom(room);
+            roomMemberRepository.deleteAll(allMembers);
+            groupEventRepository.deleteAllByGroup(room);
+            chatRoomRepository.delete(room);
+            log.info("Deleted DIRECT room {} completely and removed all its members.", roomId);
+        } else {
+            // Xóa membership của actor đối với nhóm
+            roomMemberRepository.delete(membership);
+            log.info("Removed membership of user {} from room {}", actor.getUsername(), roomId);
+
+            // Nếu không còn thành viên nào → xóa luôn room
+            long remainingMembers = roomMemberRepository.countByRoom(room);
+            if (remainingMembers == 0) {
+                groupEventRepository.deleteAllByGroup(room);
+                chatRoomRepository.delete(room);
+                log.info("Room {} has no more members, deleted room.", roomId);
+            }
+        }
+    }
 }

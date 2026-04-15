@@ -141,7 +141,18 @@ public class ChatController {
     @MessageMapping("/chat.pin")
     public void handlePinMessage(@Payload @Valid PinMessageRequest request, Principal principal) {
         try {
-            messageService.pinMessage(request.getRoomId(), request.getMessageId(), request.isPin());
+            String actorId = getUserIdFromPrincipal(principal);
+            User actor = userService.getUserById(UUID.fromString(actorId)).orElse(null);
+            String actorName = actor != null
+                    ? (actor.getDisplayName() != null ? actor.getDisplayName() : actor.getUsername())
+                    : "Ai đó";
+            messageService.pinMessage(
+                    request.getRoomId(),
+                    request.getMessageId(),
+                    request.isPin(),
+                    actorName,
+                    request.getMessageType()
+            );
         } catch (IllegalStateException e) {
             String dest = "/topic/chat/" + request.getRoomId() + "/pin";
             messagingTemplate.convertAndSend(dest, Map.of(
@@ -158,6 +169,18 @@ public class ChatController {
         String currentUserId = getUserIdFromPrincipal(principal);
         log.info("User {} clearing history for room: {}", currentUserId, roomId);
         messageService.deleteAllMessages(roomId.toString());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/api/chat/rooms/{roomId}")
+    public ResponseEntity<Void> deleteChatRoom(
+            @PathVariable UUID roomId,
+            Principal principal) {
+        String currentUserId = getUserIdFromPrincipal(principal);
+        User actor = userService.getUserById(UUID.fromString(currentUserId))
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        log.info("User {} deleting chat room: {}", currentUserId, roomId);
+        chatRoomService.deleteChatRoom(roomId, actor);
         return ResponseEntity.noContent().build();
     }
 

@@ -13,4 +13,5 @@ public class PinMessageRequest {
     private String roomId;
     private String messageId;
     private boolean pin;
+    private String messageType; // TEXT, IMAGE, VIDEO, FILE, LINK
 }

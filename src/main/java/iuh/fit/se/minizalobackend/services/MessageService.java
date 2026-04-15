@@ -25,6 +25,8 @@ public interface MessageService {
 
     void pinMessage(String chatRoomId, String messageId, boolean pin);
 
+    void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType);
+
     PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit);
 
     MessageDynamo forwardMessage(String originalRoomId, String originalMessageId, String targetRoomId, String senderId);
