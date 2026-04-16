@@ -9,6 +9,10 @@ import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.impl.MessageServiceImpl;
+import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
+import iuh.fit.se.minizalobackend.repository.FriendRepository;
+import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
+import iuh.fit.se.minizalobackend.services.MinioService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +57,18 @@ class MessageServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private ChatRoomRepository chatRoomRepository;
+
+    @Mock
+    private FriendRepository friendRepository;
+
+    @Mock
+    private GroupSettingsRepository groupSettingsRepository;
+
+    @Mock
+    private MinioService minioService;
 
     @InjectMocks
     private MessageServiceImpl messageService;
@@ -180,6 +196,11 @@ class MessageServiceTest {
     void pinMessage_AlreadyPinned_ShouldNotBlock() {
         message.setPinned(true);
         when(messageDynamoRepository.getMessage(chatRoomId, messageId)).thenReturn(Optional.of(message));
+        
+        iuh.fit.se.minizalobackend.models.ChatRoom chatRoom = new iuh.fit.se.minizalobackend.models.ChatRoom();
+        chatRoom.setId(UUID.fromString(chatRoomId));
+        chatRoom.setType(iuh.fit.se.minizalobackend.models.ERoomType.DIRECT);
+        when(chatRoomRepository.findById(UUID.fromString(chatRoomId))).thenReturn(Optional.of(chatRoom));
 
         assertDoesNotThrow(() -> messageService.pinMessage(chatRoomId, messageId, true));
         verify(messageDynamoRepository, times(2)).save(any(MessageDynamo.class));
