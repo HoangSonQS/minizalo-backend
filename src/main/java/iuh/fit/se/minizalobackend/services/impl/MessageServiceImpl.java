@@ -78,8 +78,8 @@ public class MessageServiceImpl implements MessageService {
                     "Message sent to room: " + message.getChatRoomId());
         }
 
-        // Trigger notifications for offline members (skip for SYSTEM messages)
-        if (!"SYSTEM".equals(message.getSenderId())) {
+        // Trigger notifications for offline members (skip for SYSTEM/privacy-blocked messages)
+        if (!"SYSTEM".equals(message.getSenderId()) && !message.isPrivacyBlocked()) {
             triggerNotifications(message);
         }
 
@@ -148,8 +148,17 @@ public class MessageServiceImpl implements MessageService {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
-        // ── DIRECT: chặn & chính sách nhắn tin — không được nuốt exception (trước đây catch Exception làm bỏ qua cả LazyInitializationException). ──
-        enforceDirectChatOutgoingRules(sender, request.getReceiverId());
+        // DIRECT: chặn 2 chiều vẫn throw; riêng policy người lạ thì lưu tin phía người gửi + đánh dấu privacyBlocked.
+        boolean strangerPrivacyBlocked = false;
+        try {
+            enforceDirectChatOutgoingRules(sender, request.getReceiverId());
+        } catch (IllegalStateException ex) {
+            if (AppConstants.STRANGER_MESSAGES_NOT_ALLOWED.equals(ex.getMessage())) {
+                strangerPrivacyBlocked = true;
+            } else {
+                throw ex;
+            }
+        }
 
         if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
             boolean exists = messageDynamoRepository
@@ -174,13 +183,19 @@ public class MessageServiceImpl implements MessageService {
         message.setRead(false);
         message.setReadBy(new ArrayList<>());
         message.setReactions(new ArrayList<>());
+        message.setPrivacyBlocked(strangerPrivacyBlocked);
 
         log.info("[DEBUG] ProcessMessage attachments count: {}", 
                  message.getAttachments() != null ? message.getAttachments().size() : "null");
 
         saveMessage(message);
-        String destination = "/topic/chat/" + message.getChatRoomId();
-        messagingTemplate.convertAndSend(destination, normalizeMessage(message));
+        if (strangerPrivacyBlocked) {
+            String senderDest = "/topic/chat/" + message.getChatRoomId() + "/" + senderId;
+            messagingTemplate.convertAndSend(senderDest, normalizeMessage(message));
+        } else {
+            String destination = "/topic/chat/" + message.getChatRoomId();
+            messagingTemplate.convertAndSend(destination, normalizeMessage(message));
+        }
 
         return message;
     }
@@ -335,6 +350,11 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void pinMessage(String chatRoomId, String messageId, boolean pin) {
+        pinMessage(chatRoomId, messageId, pin, null, null);
+    }
+
+    @Override
+    public void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType) {
         messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
             if (pin && !message.isPinned()) {
                 long pinnedCount = messageDynamoRepository.countPinnedMessages(chatRoomId);
@@ -345,13 +365,45 @@ public class MessageServiceImpl implements MessageService {
             message.setPinned(pin);
             messageDynamoRepository.save(message);
 
-            // Broadcast pin event
-            String destination = "/topic/chat/" + chatRoomId + "/pin";
-            messagingTemplate.convertAndSend(destination, Map.of(
+            // Broadcast pin event (trạng thái ghim)
+            String pinDestination = "/topic/chat/" + chatRoomId + "/pin";
+            messagingTemplate.convertAndSend(pinDestination, Map.of(
                     "messageId", messageId,
                     "isPinned", pin));
 
-            log.info("Message {} {} in room {}", messageId, pin ? "pinned" : "unpinned", chatRoomId);
+            // Broadcast system message vào channel chat chính để cả 2 phía thấy thông báo
+            String actor = (actorName != null && !actorName.isBlank()) ? actorName : "Ai đó";
+            String msgType = (messageType != null && !messageType.isBlank()) ? messageType.toUpperCase() : "TEXT";
+            String typeLabel;
+            switch (msgType) {
+                case "IMAGE": typeLabel = "hình ảnh"; break;
+                case "VIDEO": typeLabel = "video"; break;
+                case "FILE": typeLabel = "file"; break;
+                case "LINK": typeLabel = "link"; break;
+                default: typeLabel = "văn bản"; break;
+            }
+            String content = pin
+                    ? actor + " đã ghim 1 tin nhắn " + typeLabel + "."
+                    : actor + " đã bỏ ghim 1 tin nhắn " + typeLabel + ".";
+
+            MessageDynamo sysMsg = new MessageDynamo();
+            sysMsg.setMessageId(java.util.UUID.randomUUID().toString());
+            sysMsg.setChatRoomId(chatRoomId);
+            sysMsg.setSenderId("system");
+            sysMsg.setSenderName("Hệ thống");
+            sysMsg.setContent(content);
+            sysMsg.setType("PIN_NOTIFICATION");
+            sysMsg.setCreatedAt(java.time.Instant.now().toString());
+            sysMsg.setReplyToMessageId(pin ? messageId : null); // link đến tin nhắn được ghim khi pin
+            sysMsg.setRead(false);
+            sysMsg.setReadBy(new ArrayList<>());
+            sysMsg.setReactions(new ArrayList<>());
+            messageDynamoRepository.save(sysMsg);
+
+            String chatDestination = "/topic/chat/" + chatRoomId;
+            messagingTemplate.convertAndSend(chatDestination, sysMsg);
+
+            log.info("Message {} {} in room {} by {}", messageId, pin ? "pinned" : "unpinned", chatRoomId, actor);
         });
     }
 

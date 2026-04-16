@@ -28,6 +28,8 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, UUID> {
 
     long countByRoomAndRole(ChatRoom room, ERoomRole role);
 
+    long countByRoom(ChatRoom room);
+
     Optional<RoomMember> findByRoomAndUser_Id(ChatRoom room, UUID userId);
 
     List<RoomMember> findByRoomAndUser_IdIn(ChatRoom room, List<UUID> userIds);

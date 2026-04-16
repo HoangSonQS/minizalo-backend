@@ -182,7 +182,7 @@ class MessageServiceTest {
         when(messageDynamoRepository.getMessage(chatRoomId, messageId)).thenReturn(Optional.of(message));
 
         assertDoesNotThrow(() -> messageService.pinMessage(chatRoomId, messageId, true));
-        verify(messageDynamoRepository, times(1)).save(any(MessageDynamo.class));
+        verify(messageDynamoRepository, times(2)).save(any(MessageDynamo.class));
         verify(messagingTemplate, times(1)).convertAndSend(contains("/topic/chat/" + chatRoomId + "/pin"),
                 any(Object.class));
     }
