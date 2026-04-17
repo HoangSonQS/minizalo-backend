@@ -18,8 +18,10 @@ import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
+import iuh.fit.se.minizalobackend.repository.BlockedGroupMemberRepository;
 import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
+import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.GroupService;
@@ -50,6 +52,8 @@ public class GroupServiceImpl implements GroupService {
     private final UserRepository userRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final GroupEventRepository groupEventRepository;
+    private final GroupSettingsRepository groupSettingsRepository;
+    private final BlockedGroupMemberRepository blockedGroupMemberRepository;
     private final MessageService messageService;
     private final ModelMapper modelMapper;
     private final SimpMessagingTemplate messagingTemplate;
@@ -66,6 +70,13 @@ public class GroupServiceImpl implements GroupService {
                 .build();
 
         groupChatRoom = groupRepository.save(groupChatRoom);
+
+        // 1.5 Create default GroupSettings
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = iuh.fit.se.minizalobackend.models.GroupSettings.builder()
+                .group(groupChatRoom)
+                .joinLink(UUID.randomUUID().toString())
+                .build();
+        groupSettingsRepository.save(settings);
 
         // 2. Add creator as ADMIN member
         RoomMember creatorMember = RoomMember.builder()
@@ -268,9 +279,16 @@ public class GroupServiceImpl implements GroupService {
         ChatRoom groupChatRoom = groupRepository.findByIdAndType(request.getGroupId(), ERoomType.GROUP)
                 .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + request.getGroupId()));
 
-        boolean isMember = roomMemberRepository.findByRoomAndUser(groupChatRoom, sender).isPresent();
-        if (!isMember) {
-            throw new IllegalArgumentException("User is not a member of this group.");
+        RoomMember member = roomMemberRepository.findByRoomAndUser(groupChatRoom, sender)
+                .orElseThrow(() -> new IllegalArgumentException("User is not a member of this group."));
+
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(groupChatRoom.getId()).orElse(null);
+        if (settings != null && !settings.isAllowMemberSendMessage()) {
+            boolean isOwner = groupChatRoom.getCreatedBy().getId().equals(sender.getId());
+            boolean isAdmin = member.getRole() == ERoomRole.ADMIN;
+            if (!isOwner && !isAdmin) {
+                throw new IllegalArgumentException("Only admins can send messages in this group.");
+            }
         }
 
         MessageDynamo message = new MessageDynamo();
@@ -304,9 +322,16 @@ public class GroupServiceImpl implements GroupService {
         ChatRoom groupChatRoom = groupRepository.findByIdAndType(request.getGroupId(), ERoomType.GROUP)
                 .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + request.getGroupId()));
 
-        Optional<RoomMember> initiatorMembership = roomMemberRepository.findByRoomAndUser(groupChatRoom, initiator);
-        if (initiatorMembership.isEmpty()) {
-            throw new IllegalArgumentException("Only group members can update group information.");
+        RoomMember initiatorMembership = roomMemberRepository.findByRoomAndUser(groupChatRoom, initiator)
+                .orElseThrow(() -> new IllegalArgumentException("Only group members can update group information."));
+
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(groupChatRoom.getId()).orElse(null);
+        if (settings != null && !settings.isAllowMemberChangeName()) {
+            boolean isOwner = groupChatRoom.getCreatedBy().getId().equals(initiator.getId());
+            boolean isAdmin = initiatorMembership.getRole() == ERoomRole.ADMIN;
+            if (!isOwner && !isAdmin) {
+                throw new IllegalArgumentException("Only admins can change group name and avatar.");
+            }
         }
 
         boolean changed = false;
@@ -482,6 +507,12 @@ public class GroupServiceImpl implements GroupService {
                 })
                 .collect(Collectors.toList());
         response.setMembers(memberResponses);
+
+        groupSettingsRepository.findByGroupId(chatRoom.getId()).ifPresent(settings -> {
+            iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse settingsResponse = modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
+            response.setSettings(settingsResponse);
+        });
+
         return response;
     }
 
@@ -536,5 +567,225 @@ public class GroupServiceImpl implements GroupService {
 
         List<RoomMember> members = roomMemberRepository.findAllByRoom(groupChatRoom);
         return buildGroupResponse(groupChatRoom, members);
+    }
+
+    @Override
+    @Transactional
+    public iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse getGroupSettings(UUID groupId, User viewer) {
+        if (!roomMemberRepository.existsByRoom_IdAndUser_Id(groupId, viewer.getId())) {
+            throw new IllegalArgumentException("You are not a member of this group");
+        }
+
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(groupId)
+                .orElse(null);
+
+        // Nếu group chưa có record settings (có thể do dữ liệu cũ), tự tạo mặc định để FE hiển thị được UI.
+        if (settings == null) {
+            ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                    .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+            settings = iuh.fit.se.minizalobackend.models.GroupSettings.builder()
+                    .group(groupChatRoom)
+                    .joinLink(UUID.randomUUID().toString())
+                    .build();
+
+            groupSettingsRepository.save(settings);
+        }
+
+        return modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
+    }
+
+    @Override
+    @Transactional
+    public iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse updateGroupSettings(iuh.fit.se.minizalobackend.dtos.request.UpdateGroupSettingsRequest request, User initiator) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(request.getGroupId(), ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
+
+        boolean isOwner = groupChatRoom.getCreatedBy().getId().equals(initiator.getId());
+        boolean isAdmin = roomMemberRepository.findByRoomAndUserAndRole(groupChatRoom, initiator, ERoomRole.ADMIN).isPresent();
+        if (!isOwner && !isAdmin) {
+            throw new IllegalArgumentException("Only admins can update group settings.");
+        }
+
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(request.getGroupId())
+                .orElseThrow(() -> new ResourceNotFoundException("Settings not found for group"));
+
+        if (request.getAllowMemberChangeName() != null) settings.setAllowMemberChangeName(request.getAllowMemberChangeName());
+        if (request.getAllowMemberPin() != null) settings.setAllowMemberPin(request.getAllowMemberPin());
+        if (request.getAllowMemberCreatePoll() != null) settings.setAllowMemberCreatePoll(request.getAllowMemberCreatePoll());
+        if (request.getAllowMemberSendMessage() != null) settings.setAllowMemberSendMessage(request.getAllowMemberSendMessage());
+        if (request.getRequireApproval() != null) settings.setRequireApproval(request.getRequireApproval());
+        if (request.getAllowNewMemberReadHistory() != null) settings.setAllowNewMemberReadHistory(request.getAllowNewMemberReadHistory());
+        if (request.getAllowJoinByLink() != null) settings.setAllowJoinByLink(request.getAllowJoinByLink());
+
+        settings = groupSettingsRepository.save(settings);
+        groupChatRoom.setUpdatedAt(LocalDateTime.now());
+        groupRepository.save(groupChatRoom);
+
+        return modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
+    }
+
+    @Override
+    @Transactional
+    public GroupResponse transferOwnership(UUID groupId, UUID newOwnerId, User initiator) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
+
+        if (!groupChatRoom.getCreatedBy().getId().equals(initiator.getId())) {
+            throw new IllegalArgumentException("Only current owner can transfer ownership.");
+        }
+
+        User newOwner = userRepository.findById(newOwnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("New owner not found"));
+
+        if (!roomMemberRepository.existsByRoomAndUser(groupChatRoom, newOwner)) {
+            throw new IllegalArgumentException("New owner must be a member of the group.");
+        }
+
+        groupChatRoom.setCreatedBy(newOwner);
+        groupChatRoom.setUpdatedAt(LocalDateTime.now());
+        groupRepository.save(groupChatRoom);
+
+        // Ensure new owner is ADMIN
+        RoomMember newOwnerMember = roomMemberRepository.findByRoomAndUser(groupChatRoom, newOwner).get();
+        newOwnerMember.setRole(ERoomRole.ADMIN);
+        roomMemberRepository.save(newOwnerMember);
+
+        publishGroupEvent(groupChatRoom, ERoomEventType.NAME_CHANGED, initiator.getUsername() + " đã nhường quyền trưởng nhóm cho " + newOwner.getUsername(), newOwner);
+
+        return buildGroupResponse(groupChatRoom, roomMemberRepository.findAllByRoom(groupChatRoom));
+    }
+
+    @Override
+    @Transactional
+    public void blockMember(UUID groupId, UUID targetUserId, User initiator) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
+
+        boolean isOwner = groupChatRoom.getCreatedBy().getId().equals(initiator.getId());
+        boolean isAdmin = roomMemberRepository.findByRoomAndUserAndRole(groupChatRoom, initiator, ERoomRole.ADMIN).isPresent();
+
+        if (!isOwner && !isAdmin) {
+            throw new IllegalArgumentException("Only admins can block members.");
+        }
+
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        boolean targetIsOwner = groupChatRoom.getCreatedBy().getId().equals(targetUserId);
+        boolean targetIsAdmin = roomMemberRepository.findByRoomAndUserAndRole(groupChatRoom, targetUser, ERoomRole.ADMIN).isPresent();
+
+        if (targetIsOwner || (targetIsAdmin && !isOwner)) {
+            throw new IllegalArgumentException("You cannot block this user.");
+        }
+
+        if (!blockedGroupMemberRepository.existsByGroupIdAndBlockedUserId(groupId, targetUserId)) {
+            iuh.fit.se.minizalobackend.models.BlockedGroupMember blocked = iuh.fit.se.minizalobackend.models.BlockedGroupMember.builder()
+                    .group(groupChatRoom)
+                    .blockedUser(targetUser)
+                    .blockedBy(initiator)
+                    .build();
+            blockedGroupMemberRepository.save(blocked);
+            
+            // Remove them if they are in the group
+            roomMemberRepository.findByRoomAndUser(groupChatRoom, targetUser).ifPresent(roomMemberRepository::delete);
+            
+            String sysMsg = initiator.getUsername() + " đã chặn " + targetUser.getUsername() + " khỏi nhóm.";
+            publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_REMOVED, sysMsg, targetUser);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void unblockMember(UUID groupId, UUID targetUserId, User initiator) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
+
+        boolean isOwner = groupChatRoom.getCreatedBy().getId().equals(initiator.getId());
+        boolean isAdmin = roomMemberRepository.findByRoomAndUserAndRole(groupChatRoom, initiator, ERoomRole.ADMIN).isPresent();
+
+        if (!isOwner && !isAdmin) {
+            throw new IllegalArgumentException("Only admins can unblock members.");
+        }
+
+        blockedGroupMemberRepository.deleteByGroupIdAndBlockedUserId(groupId, targetUserId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<iuh.fit.se.minizalobackend.dtos.response.BlockedGroupMemberResponse> getBlockedMembers(UUID groupId, User viewer) {
+        if (!roomMemberRepository.findByRoom_IdAndUser_IdAndRole(groupId, viewer.getId(), ERoomRole.ADMIN).isPresent() &&
+            !groupRepository.findById(groupId).map(g -> g.getCreatedBy().getId().equals(viewer.getId())).orElse(false)) {
+            throw new IllegalArgumentException("Only admins can view blocked members.");
+        }
+
+        return blockedGroupMemberRepository.findByGroupId(groupId).stream().map(b -> iuh.fit.se.minizalobackend.dtos.response.BlockedGroupMemberResponse.builder()
+                .id(b.getId().toString())
+                .userId(b.getBlockedUser().getId().toString())
+                .username(b.getBlockedUser().getUsername())
+                .displayName(b.getBlockedUser().getDisplayName())
+                .avatarUrl(minioService.ensurePublicUrl(b.getBlockedUser().getAvatarUrl()))
+                .blockedAt(b.getBlockedAt())
+                .blockedBy(b.getBlockedBy().getUsername())
+                .build()).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public GroupResponse joinByLink(String joinToken, User user) {
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findAll().stream()
+                .filter(s -> joinToken.equals(s.getJoinLink()))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid join link."));
+
+        if (!settings.isAllowJoinByLink()) {
+            throw new IllegalArgumentException("Joining by link is not allowed for this group.");
+        }
+
+        ChatRoom group = settings.getGroup();
+        
+        if (blockedGroupMemberRepository.existsByGroupIdAndBlockedUserId(group.getId(), user.getId())) {
+            throw new IllegalArgumentException("You are blocked from joining this group.");
+        }
+
+        if (roomMemberRepository.existsByRoomAndUser(group, user)) {
+            return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group));
+        }
+
+        // Add user
+        RoomMember member = RoomMember.builder()
+                .room(group)
+                .user(user)
+                .role(ERoomRole.MEMBER)
+                .build();
+        roomMemberRepository.save(member);
+
+        String sysMsg = user.getUsername() + " đã tham gia nhóm bằng link.";
+        publishGroupEvent(group, ERoomEventType.MEMBER_ADDED, sysMsg, user);
+
+        return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group));
+    }
+
+    @Override
+    @Transactional
+    public String refreshJoinLink(UUID groupId, User initiator) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found"));
+
+        boolean isOwner = groupChatRoom.getCreatedBy().getId().equals(initiator.getId());
+        boolean isAdmin = roomMemberRepository.findByRoomAndUserAndRole(groupChatRoom, initiator, ERoomRole.ADMIN).isPresent();
+
+        if (!isOwner && !isAdmin) {
+            throw new IllegalArgumentException("Only admins can refresh the join link.");
+        }
+
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Settings not found"));
+
+        String newLink = UUID.randomUUID().toString();
+        settings.setJoinLink(newLink);
+        groupSettingsRepository.save(settings);
+        
+        return newLink;
     }
 }

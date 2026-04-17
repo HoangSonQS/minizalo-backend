@@ -34,4 +34,20 @@ public interface GroupService {
     List<iuh.fit.se.minizalobackend.dtos.response.GroupEventResponse> getGroupEvents(UUID groupId, User viewer);
 
     GroupResponse changeMemberRole(UUID groupId, UUID targetUserId, iuh.fit.se.minizalobackend.models.ERoomRole newRole, User initiator);
+
+    // Group settings
+    iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse getGroupSettings(UUID groupId, User viewer);
+    iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse updateGroupSettings(iuh.fit.se.minizalobackend.dtos.request.UpdateGroupSettingsRequest request, User initiator);
+
+    // Transfer ownership  
+    GroupResponse transferOwnership(UUID groupId, UUID newOwnerId, User initiator);
+
+    // Block/Unblock members
+    void blockMember(UUID groupId, UUID targetUserId, User initiator);
+    void unblockMember(UUID groupId, UUID targetUserId, User initiator);
+    List<iuh.fit.se.minizalobackend.dtos.response.BlockedGroupMemberResponse> getBlockedMembers(UUID groupId, User viewer);
+
+    // Join by link
+    GroupResponse joinByLink(String joinToken, User user);
+    String refreshJoinLink(UUID groupId, User initiator);
 }

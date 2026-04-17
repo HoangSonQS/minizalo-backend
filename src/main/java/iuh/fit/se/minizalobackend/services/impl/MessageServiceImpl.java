@@ -14,6 +14,7 @@ import iuh.fit.se.minizalobackend.models.ERoomType;
 import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
+import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.NotificationService;
@@ -49,6 +50,7 @@ public class MessageServiceImpl implements MessageService {
     private final UserPresenceService userPresenceService;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final GroupSettingsRepository groupSettingsRepository;
     private final AnalyticsService analyticsService;
     private final UserRepository userRepository;
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
@@ -362,6 +364,26 @@ public class MessageServiceImpl implements MessageService {
                     throw new IllegalStateException("Chỉ được pin tối đa 5 tin nhắn trong một cuộc trò chuyện.");
                 }
             }
+
+            // Permission check for groups
+            chatRoomRepository.findById(java.util.UUID.fromString(chatRoomId)).ifPresent(room -> {
+                if (room.getType() == ERoomType.GROUP && actorName != null && !actorName.isBlank() && !actorName.equals("Ai đó")) {
+                    iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(room.getId()).orElse(null);
+                    if (settings != null && !settings.isAllowMemberPin()) {
+                        // find the sender room member
+                        userRepository.findByUsername(actorName).or(() -> userRepository.findByUsername(actorName)).ifPresent(u -> {
+                            roomMemberRepository.findByRoomAndUser(room, u).ifPresent(member -> {
+                                boolean isOwner = room.getCreatedBy().getId().equals(u.getId());
+                                boolean isAdmin = member.getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
+                                if (!isOwner && !isAdmin) {
+                                    throw new IllegalStateException("Only admins can pin messages in this group.");
+                                }
+                            });
+                        });
+                    }
+                }
+            });
+
             message.setPinned(pin);
             messageDynamoRepository.save(message);
 
