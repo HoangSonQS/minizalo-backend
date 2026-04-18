@@ -39,7 +39,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -69,18 +68,19 @@ public class GroupServiceImpl implements GroupService {
                 .createdBy(creator)
                 .build();
 
-        groupChatRoom = groupRepository.save(groupChatRoom);
+        final ChatRoom savedRoom = groupRepository.save(groupChatRoom);
+        final String roomIdStr = savedRoom.getId().toString();
 
         // 1.5 Create default GroupSettings
         iuh.fit.se.minizalobackend.models.GroupSettings settings = iuh.fit.se.minizalobackend.models.GroupSettings.builder()
-                .group(groupChatRoom)
+                .group(savedRoom)
                 .joinLink(UUID.randomUUID().toString())
                 .build();
         groupSettingsRepository.save(settings);
 
         // 2. Add creator as ADMIN member
         RoomMember creatorMember = RoomMember.builder()
-                .room(groupChatRoom)
+                .room(savedRoom)
                 .user(creator)
                 .role(ERoomRole.ADMIN)
                 .build();
@@ -99,7 +99,7 @@ public class GroupServiceImpl implements GroupService {
             for (User user : initialUsers) {
                 if (!user.getId().equals(creator.getId())) { // Check if user is not the creator
                     RoomMember member = RoomMember.builder()
-                            .room(groupChatRoom)
+                            .room(savedRoom)
                             .user(user)
                             .role(ERoomRole.MEMBER)
                             .build();
@@ -111,12 +111,111 @@ public class GroupServiceImpl implements GroupService {
             }
         }
 
+        // 3.5 SYSTEM trong cuộc hội thoại (giống addMembers) + broadcast WebSocket
+        String creatorDisplayName = creator.getDisplayName() != null && !creator.getDisplayName().trim().isEmpty()
+                ? creator.getDisplayName()
+                : creator.getUsername();
+        boolean addedAnyMember = false;
+        for (RoomMember member : members) {
+            if (member.getUser().getId().equals(creator.getId())) {
+                continue;
+            }
+            addedAnyMember = true;
+            User addedUser = member.getUser();
+            String memberDisplayName = addedUser.getDisplayName() != null
+                    && !addedUser.getDisplayName().trim().isEmpty()
+                    ? addedUser.getDisplayName()
+                    : addedUser.getUsername();
+            String sysMsg = creatorDisplayName + " đã thêm " + memberDisplayName + " vào nhóm.";
+
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(savedRoom.getId().toString());
+            message.setSenderId(creator.getId().toString());
+            message.setSenderName(creatorDisplayName);
+            message.setContent(sysMsg);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo savedMessage = messageService.saveMessage(message);
+
+            GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                    .messageId(savedMessage.getMessageId())
+                    .groupId(savedRoom.getId().toString())
+                    .senderId(creator.getId().toString())
+                    .senderUsername(creatorDisplayName)
+                    .content(sysMsg)
+                    .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                    .timestamp(savedMessage.getCreatedAt())
+                    .isRecalled(false)
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/chat/" + roomIdStr, groupChatMessage);
+
+            publishGroupEvent(savedRoom, ERoomEventType.MEMBER_ADDED, sysMsg, addedUser);
+        }
+
+        if (!addedAnyMember) {
+            String sysMsg = creatorDisplayName + " đã tạo nhóm \"" + savedRoom.getName() + "\".";
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(savedRoom.getId().toString());
+            message.setSenderId(creator.getId().toString());
+            message.setSenderName(creatorDisplayName);
+            message.setContent(sysMsg);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo savedMessage = messageService.saveMessage(message);
+
+            GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                    .messageId(savedMessage.getMessageId())
+                    .groupId(savedRoom.getId().toString())
+                    .senderId(creator.getId().toString())
+                    .senderUsername(creatorDisplayName)
+                    .content(sysMsg)
+                    .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                    .timestamp(savedMessage.getCreatedAt())
+                    .isRecalled(false)
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/chat/" + roomIdStr, groupChatMessage);
+        }
+
+        savedRoom.setUpdatedAt(LocalDateTime.now());
+        groupRepository.save(savedRoom);
+
         // 4. Publish GROUP_CREATED event
-        publishGroupEvent(groupChatRoom, ERoomEventType.CREATED,
-                "Group '" + groupChatRoom.getName() + "' created.", creator);
+        publishGroupEvent(savedRoom, ERoomEventType.CREATED,
+                "Group '" + savedRoom.getName() + "' created.", creator);
+
+        // Notify creator + initial members to refresh room list (realtime)
+        try {
+            messagingTemplate.convertAndSendToUser(
+                    creator.getUsername(),
+                    "/queue/rooms",
+                    "{\"action\":\"ADDED\",\"roomId\":\"" + roomIdStr + "\"}"
+            );
+            if (request.getInitialMemberIds() != null) {
+                for (String mid : request.getInitialMemberIds()) {
+                    try {
+                        UUID uid = UUID.fromString(mid);
+                        if (uid.equals(creator.getId())) continue;
+                        userRepository.findById(uid).ifPresent(u ->
+                                messagingTemplate.convertAndSendToUser(u.getUsername(), "/queue/rooms",
+                                        "{\"action\":\"ADDED\",\"roomId\":\"" + roomIdStr + "\"}")
+                        );
+                    } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to push room ADDED updates: {}", e.getMessage());
+        }
+
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + roomIdStr,
+                    "{\"roomListEvent\":\"ADDED\",\"roomId\":\"" + roomIdStr + "\"}");
+        } catch (Exception e) {
+            log.warn("Failed to broadcast room ADDED on chat topic: {}", e.getMessage());
+        }
 
         // 5. Build GroupResponse
-        return buildGroupResponse(groupChatRoom, members);
+        return buildGroupResponse(savedRoom, members);
     }
 
     @Override
@@ -128,6 +227,14 @@ public class GroupServiceImpl implements GroupService {
         if (!roomMemberRepository.findByRoomAndUserAndRole(groupChatRoom, initiator, ERoomRole.ADMIN).isPresent() &&
                 !groupChatRoom.getCreatedBy().getId().equals(initiator.getId())) {
             throw new IllegalArgumentException("Only group admins or owner can add members.");
+        }
+
+        // Không cho thêm user đã bị chặn khỏi nhóm (chỉ có thể thêm lại sau khi bỏ chặn)
+        List<UUID> blockedIds = memberIds.stream()
+                .filter(uid -> blockedGroupMemberRepository.existsByGroupIdAndBlockedUserId(groupId, uid))
+                .toList();
+        if (!blockedIds.isEmpty()) {
+            throw new IllegalArgumentException("Không thể thêm thành viên đã bị chặn khỏi nhóm. Vui lòng bỏ chặn trước.");
         }
 
         List<User> usersToAdd = userRepository.findAllById(memberIds);
@@ -182,6 +289,27 @@ public class GroupServiceImpl implements GroupService {
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ADDED,
                     sysMsg,
                     member.getUser());
+
+            // Notify the added member to refresh room list (realtime)
+            try {
+                messagingTemplate.convertAndSendToUser(
+                        member.getUser().getUsername(),
+                        "/queue/rooms",
+                        "{\"action\":\"ADDED\",\"roomId\":\"" + groupChatRoom.getId().toString() + "\"}"
+                );
+            } catch (Exception e) {
+                log.warn("Failed to push room ADDED for user {}: {}", member.getUser().getUsername(), e.getMessage());
+            }
+        }
+
+        if (!newMembers.isEmpty()) {
+            try {
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + groupChatRoom.getId().toString(),
+                        "{\"roomListEvent\":\"ADDED\",\"roomId\":\"" + groupChatRoom.getId().toString() + "\"}");
+            } catch (Exception e) {
+                log.warn("Failed to broadcast room ADDED on chat topic: {}", e.getMessage());
+            }
         }
 
         List<RoomMember> allMembers = roomMemberRepository.findAllByRoom(groupChatRoom);
@@ -234,6 +362,15 @@ public class GroupServiceImpl implements GroupService {
                     .build();
 
             messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), groupChatMessage);
+
+            try {
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + groupChatRoom.getId().toString(),
+                        "{\"roomListEvent\":\"REMOVED\",\"roomId\":\"" + groupChatRoom.getId()
+                                + "\",\"forUserId\":\"" + member.getUser().getId() + "\"}");
+            } catch (Exception e) {
+                log.warn("Failed to broadcast room REMOVED for kicked user: {}", e.getMessage());
+            }
 
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_REMOVED,
                     sysMsg,
@@ -481,9 +618,45 @@ public class GroupServiceImpl implements GroupService {
         publishGroupEvent(groupChatRoom, ERoomEventType.ROOM_DELETED,
                 "Group '" + groupChatRoom.getName() + "' has been disbanded by the owner.", initiator);
 
+        // Capture members before deletion to push realtime updates
+        List<RoomMember> membersToNotify = roomMemberRepository.findAllByRoom(groupChatRoom);
+
+        // Mọi thành viên đã subscribe /topic/chat/{roomId} — broadcast trước khi xóa DB (ổn định hơn /user/queue)
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + groupId.toString(),
+                    "{\"roomListEvent\":\"REMOVED\",\"roomId\":\"" + groupId.toString() + "\"}");
+        } catch (Exception e) {
+            log.warn("Failed to broadcast room REMOVED on chat topic: {}", e.getMessage());
+        }
+
+        // Xóa các bảng phụ trước để tránh lỗi FK constraint (vd: blocked_group_members → chat_rooms)
+        messageService.deleteAllMessages(groupChatRoom.getId().toString());
+        blockedGroupMemberRepository.deleteAll(blockedGroupMemberRepository.findByGroup(groupChatRoom));
+        groupSettingsRepository.findByGroupId(groupId).ifPresent(groupSettingsRepository::delete);
         roomMemberRepository.deleteAll(roomMemberRepository.findAllByRoom(groupChatRoom));
         groupEventRepository.deleteAll(groupEventRepository.findByGroupIdOrderByCreatedAtDesc(groupId));
         groupRepository.delete(groupChatRoom);
+
+        // Push ROOM_REMOVED to all members (realtime remove from chat list)
+        try {
+            for (RoomMember rm : membersToNotify) {
+                User u = rm.getUser();
+                if (u == null) continue;
+                messagingTemplate.convertAndSendToUser(
+                        u.getUsername(),
+                        "/queue/rooms",
+                        "{\"action\":\"REMOVED\",\"roomId\":\"" + groupId.toString() + "\"}"
+                );
+            }
+            messagingTemplate.convertAndSendToUser(
+                    initiator.getUsername(),
+                    "/queue/rooms",
+                    "{\"action\":\"REMOVED\",\"roomId\":\"" + groupId.toString() + "\"}"
+            );
+        } catch (Exception e) {
+            log.warn("Failed to push room REMOVED updates: {}", e.getMessage());
+        }
 
         return new MessageResponse("Group disbanded successfully.");
     }
@@ -551,7 +724,6 @@ public class GroupServiceImpl implements GroupService {
         RoomMember targetMember = roomMemberRepository.findByRoomAndUser_Id(groupChatRoom, targetUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Member not found in group."));
 
-        ERoomRole oldRole = targetMember.getRole();
         targetMember.setRole(newRole);
         roomMemberRepository.save(targetMember);
 
