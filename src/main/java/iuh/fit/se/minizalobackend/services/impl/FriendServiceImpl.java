@@ -132,8 +132,7 @@ public class FriendServiceImpl implements FriendService {
                         "senderUsername", "SYSTEM",
                         "content", savedSysMsg.getContent(),
                         "type", AppConstants.MESSAGE_TYPE_SYSTEM,
-                        "timestamp", savedSysMsg.getCreatedAt()
-                ));
+                        "timestamp", savedSysMsg.getCreatedAt()));
 
         return new AcceptFriendRequestResponse(mapFriendToFriendResponse(acceptedRequest), room);
 

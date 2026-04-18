@@ -80,7 +80,8 @@ public class MessageServiceImpl implements MessageService {
                     "Message sent to room: " + message.getChatRoomId());
         }
 
-        // Trigger notifications for offline members (skip for SYSTEM/privacy-blocked messages)
+        // Trigger notifications for offline members (skip for SYSTEM/privacy-blocked
+        // messages)
         if (!"SYSTEM".equals(message.getSenderId()) && !message.isPrivacyBlocked()) {
             triggerNotifications(message);
         }
@@ -150,7 +151,8 @@ public class MessageServiceImpl implements MessageService {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
-        // DIRECT: chặn 2 chiều vẫn throw; riêng policy người lạ thì lưu tin phía người gửi + đánh dấu privacyBlocked.
+        // DIRECT: chặn 2 chiều vẫn throw; riêng policy người lạ thì lưu tin phía người
+        // gửi + đánh dấu privacyBlocked.
         boolean strangerPrivacyBlocked = false;
         try {
             enforceDirectChatOutgoingRules(sender, request.getReceiverId());
@@ -187,8 +189,8 @@ public class MessageServiceImpl implements MessageService {
         message.setReactions(new ArrayList<>());
         message.setPrivacyBlocked(strangerPrivacyBlocked);
 
-        log.info("[DEBUG] ProcessMessage attachments count: {}", 
-                 message.getAttachments() != null ? message.getAttachments().size() : "null");
+        log.info("[DEBUG] ProcessMessage attachments count: {}",
+                message.getAttachments() != null ? message.getAttachments().size() : "null");
 
         saveMessage(message);
         if (strangerPrivacyBlocked) {
@@ -238,12 +240,12 @@ public class MessageServiceImpl implements MessageService {
     public PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit) {
         log.info("Fetching messages from DynamoDB for room: {}, limit: {}", roomId, limit);
         PaginatedMessageResult result = messageDynamoRepository.getMessagesByRoomId(roomId.toString(), lastKey, limit);
-        
+
         // Normalize URLs for all messages
         if (result.getMessages() != null) {
             result.getMessages().forEach(this::normalizeMessage);
         }
-        
+
         log.info("Found {} messages for room {}", result.getMessages().size(), roomId);
         return result;
     }
@@ -367,19 +369,24 @@ public class MessageServiceImpl implements MessageService {
 
             // Permission check for groups
             chatRoomRepository.findById(java.util.UUID.fromString(chatRoomId)).ifPresent(room -> {
-                if (room.getType() == ERoomType.GROUP && actorName != null && !actorName.isBlank() && !actorName.equals("Ai đó")) {
-                    iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(room.getId()).orElse(null);
+                if (room.getType() == ERoomType.GROUP && actorName != null && !actorName.isBlank()
+                        && !actorName.equals("Ai đó")) {
+                    iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository
+                            .findByGroupId(room.getId()).orElse(null);
                     if (settings != null && !settings.isAllowMemberPin()) {
                         // find the sender room member
-                        userRepository.findByUsername(actorName).or(() -> userRepository.findByUsername(actorName)).ifPresent(u -> {
-                            roomMemberRepository.findByRoomAndUser(room, u).ifPresent(member -> {
-                                boolean isOwner = room.getCreatedBy().getId().equals(u.getId());
-                                boolean isAdmin = member.getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
-                                if (!isOwner && !isAdmin) {
-                                    throw new IllegalStateException("Only admins can pin messages in this group.");
-                                }
-                            });
-                        });
+                        userRepository.findByUsername(actorName).or(() -> userRepository.findByUsername(actorName))
+                                .ifPresent(u -> {
+                                    roomMemberRepository.findByRoomAndUser(room, u).ifPresent(member -> {
+                                        boolean isOwner = room.getCreatedBy().getId().equals(u.getId());
+                                        boolean isAdmin = member
+                                                .getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
+                                        if (!isOwner && !isAdmin) {
+                                            throw new IllegalStateException(
+                                                    "Only admins can pin messages in this group.");
+                                        }
+                                    });
+                                });
                     }
                 }
             });
@@ -398,11 +405,21 @@ public class MessageServiceImpl implements MessageService {
             String msgType = (messageType != null && !messageType.isBlank()) ? messageType.toUpperCase() : "TEXT";
             String typeLabel;
             switch (msgType) {
-                case "IMAGE": typeLabel = "hình ảnh"; break;
-                case "VIDEO": typeLabel = "video"; break;
-                case "FILE": typeLabel = "file"; break;
-                case "LINK": typeLabel = "link"; break;
-                default: typeLabel = "văn bản"; break;
+                case "IMAGE":
+                    typeLabel = "hình ảnh";
+                    break;
+                case "VIDEO":
+                    typeLabel = "video";
+                    break;
+                case "FILE":
+                    typeLabel = "file";
+                    break;
+                case "LINK":
+                    typeLabel = "link";
+                    break;
+                default:
+                    typeLabel = "văn bản";
+                    break;
             }
             String content = pin
                     ? actor + " đã ghim 1 tin nhắn " + typeLabel + "."
@@ -432,7 +449,8 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit) {
         log.info("Fetching pinned messages from DynamoDB for room: {}, limit: {}", roomId, limit);
-        PaginatedMessageResult result = messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey, limit);
+        PaginatedMessageResult result = messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey,
+                limit);
         if (result.getMessages() != null) {
             result.getMessages().forEach(this::normalizeMessage);
         }
@@ -468,7 +486,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private MessageDynamo normalizeMessage(MessageDynamo message) {
-        if (message == null || message.getAttachments() == null) return message;
+        if (message == null || message.getAttachments() == null)
+            return message;
         message.getAttachments().forEach(attachment -> {
             if (attachment.getUrl() != null) {
                 attachment.setUrl(minioService.ensurePublicUrl(attachment.getUrl()));
@@ -537,7 +556,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     /**
-     * Phòng DIRECT: chặn 2 chiều + {@link #assertRecipientAcceptsDirectMessageFrom}.
+     * Phòng DIRECT: chặn 2 chiều +
+     * {@link #assertRecipientAcceptsDirectMessageFrom}.
      * Không bọc try/catch — mọi lỗi phải lan truyền để không gửi nhầm tin.
      */
     private void enforceDirectChatOutgoingRules(User sender, String roomIdStr) {
@@ -585,7 +605,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     /**
-     * recipient = người nhận tin (đối phương trong phòng DIRECT). Kiểm tra allowMessagesFrom.
+     * recipient = người nhận tin (đối phương trong phòng DIRECT). Kiểm tra
+     * allowMessagesFrom.
      */
     private void assertRecipientAcceptsDirectMessageFrom(User sender, User recipient) {
         EPrivacyAudience policy = recipient.getAllowMessagesFrom() != null
