@@ -84,6 +84,22 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
     }
 
     @Override
+    public List<MessageDynamo> getMessagesBetweenDates(String chatRoomId, String startTime, String endTime) {
+        QueryConditional queryConditional = QueryConditional.sortBetween(
+                Key.builder().partitionValue(chatRoomId).sortValue(startTime).build(),
+                Key.builder().partitionValue(chatRoomId).sortValue(endTime).build()
+        );
+
+        var pages = messageTable.query(r -> r.queryConditional(queryConditional).scanIndexForward(true));
+        
+        List<MessageDynamo> results = new ArrayList<>();
+        for (Page<MessageDynamo> page : pages) {
+            results.addAll(page.items());
+        }
+        return results;
+    }
+
+    @Override
     public Optional<MessageDynamo> getMessage(String chatRoomId, String messageId) {
         QueryConditional queryConditional = QueryConditional
                 .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
