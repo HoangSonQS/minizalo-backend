@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,7 +68,9 @@ public class ChatControllerTest {
         PaginatedMessageResult mockResult = new PaginatedMessageResult(Collections.singletonList(message),
                 "nextOpaqueKey");
 
-        when(messageService.getRoomMessages(eq(roomId), eq(lastKey), eq(limit))).thenReturn(mockResult);
+        // Controller hiện truyền thêm viewerId để enforce quyền xem lịch sử nhóm.
+        when(messageService.getRoomMessages(eq(roomId), eq(lastKey), eq(limit), anyString()))
+                .thenReturn(mockResult);
 
         mockMvc.perform(get("/api/chat/history/{roomId}", roomId)
                 .param("lastKey", lastKey)
