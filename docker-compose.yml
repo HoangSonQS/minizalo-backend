@@ -100,7 +100,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_PUBLIC_URL=http://192.168.1.147:9000
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
@@ -110,6 +110,8 @@ services:
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD=${MAIL_PASSWORD}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AGORA_APP_ID=${AGORA_APP_ID}
+      - AGORA_APP_CERTIFICATE=${AGORA_APP_CERTIFICATE}
     depends_on:
       minizalo-db:
         condition: service_healthy
