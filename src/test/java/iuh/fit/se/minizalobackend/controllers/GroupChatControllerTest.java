@@ -81,12 +81,24 @@ public class GroupChatControllerTest {
                 when(userService.getUserById(testUserId)).thenReturn(Optional.of(testUser));
         }
 
+        /** Tránh phụ thuộc @AllArgsConstructor khi DTO mở rộng thêm trường. */
+        private GroupResponse sampleGroupResponse(String id, String groupName) {
+                GroupResponse g = new GroupResponse();
+                g.setId(id);
+                g.setGroupName(groupName);
+                g.setOwnerId(testUserId.toString());
+                g.setMembers(new ArrayList<>());
+                g.setDisbanded(false);
+                g.setPendingJoinRequests(Collections.emptyList());
+                g.setPendingJoinRequestCount(0);
+                return g;
+        }
+
         @Test
         void createGroup_Success() throws Exception {
                 List<String> initialMemberIds = new ArrayList<>();
                 CreateGroupRequest createGroupRequest = new CreateGroupRequest("Test Group", initialMemberIds);
-                GroupResponse groupResponse = new GroupResponse(UUID.randomUUID().toString(), "Test Group",
-                                null, testUserId.toString(), null, new ArrayList<>(), null);
+                GroupResponse groupResponse = sampleGroupResponse(UUID.randomUUID().toString(), "Test Group");
 
                 when(groupService.createGroup(any(CreateGroupRequest.class), eq(testUser))).thenReturn(groupResponse);
 
@@ -113,8 +125,7 @@ public class GroupChatControllerTest {
                 UUID groupId = UUID.randomUUID();
                 List<UUID> memberIds = Collections.singletonList(UUID.randomUUID());
                 AddMembersRequest addMembersRequest = new AddMembersRequest(groupId, memberIds);
-                GroupResponse groupResponse = new GroupResponse(groupId.toString(), "Test Group", null,
-                                testUserId.toString(), null, new ArrayList<>(), null);
+                GroupResponse groupResponse = sampleGroupResponse(groupId.toString(), "Test Group");
 
                 when(groupService.addMembersToGroup(eq(groupId), eq(memberIds), eq(testUser)))
                                 .thenReturn(groupResponse);
@@ -130,8 +141,7 @@ public class GroupChatControllerTest {
                 UUID groupId = UUID.randomUUID();
                 List<UUID> memberIds = Collections.singletonList(UUID.randomUUID());
                 RemoveMembersRequest removeMembersRequest = new RemoveMembersRequest(groupId, memberIds);
-                GroupResponse groupResponse = new GroupResponse(groupId.toString(), "Test Group", null,
-                                testUserId.toString(), null, new ArrayList<>(), null);
+                GroupResponse groupResponse = sampleGroupResponse(groupId.toString(), "Test Group");
 
                 when(groupService.removeMembersFromGroup(eq(groupId), eq(memberIds), eq(testUser)))
                                 .thenReturn(groupResponse);
@@ -145,8 +155,7 @@ public class GroupChatControllerTest {
         @Test
         void getGroupInfo_Success() throws Exception {
                 UUID groupId = UUID.randomUUID();
-                GroupResponse groupResponse = new GroupResponse(groupId.toString(), "Test Group", null,
-                                testUserId.toString(), null, new ArrayList<>(), null);
+                GroupResponse groupResponse = sampleGroupResponse(groupId.toString(), "Test Group");
 
                 when(groupService.getGroupInfo(eq(groupId), eq(testUser))).thenReturn(groupResponse);
 
@@ -158,8 +167,7 @@ public class GroupChatControllerTest {
         @Test
         void getUsersGroups_Success() throws Exception {
                 UUID groupId = UUID.randomUUID();
-                GroupResponse groupResponse = new GroupResponse(groupId.toString(), "Test Group", null,
-                                testUserId.toString(), null, new ArrayList<>(), null);
+                GroupResponse groupResponse = sampleGroupResponse(groupId.toString(), "Test Group");
                 List<GroupResponse> groupList = Collections.singletonList(groupResponse);
 
                 when(groupService.getUsersGroups(eq(testUser))).thenReturn(groupList);
@@ -187,8 +195,7 @@ public class GroupChatControllerTest {
         void updateGroup_Success() throws Exception {
                 UUID groupId = UUID.randomUUID();
                 UpdateGroupRequest updateGroupRequest = new UpdateGroupRequest(groupId, "New Group Name", null);
-                GroupResponse groupResponse = new GroupResponse(groupId.toString(), "New Group Name",
-                                null, testUserId.toString(), null, new ArrayList<>(), null);
+                GroupResponse groupResponse = sampleGroupResponse(groupId.toString(), "New Group Name");
 
                 when(groupService.updateGroup(any(UpdateGroupRequest.class), eq(testUser))).thenReturn(groupResponse);
 

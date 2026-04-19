@@ -23,4 +23,5 @@ public class ChatRoomResponse {
     private int unreadCount;
     private List<RoomMemberResponse> members;
     private boolean hasInteracted;
+    private boolean disbanded;
 }

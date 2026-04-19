@@ -150,6 +150,7 @@ public class ChatController {
                     request.getRoomId(),
                     request.getMessageId(),
                     request.isPin(),
+                    actorId,
                     actorName,
                     request.getMessageType()
             );
@@ -192,7 +193,7 @@ public class ChatController {
             Principal principal) {
         String currentUserId = getUserIdFromPrincipal(principal);
         log.info("Fetching history for room: {}, limit: {}, user: {}", roomId, limit, currentUserId);
-        PaginatedMessageResult result = messageService.getRoomMessages(roomId, lastKey, limit);
+        PaginatedMessageResult result = messageService.getRoomMessages(roomId, lastKey, limit, currentUserId);
         if (result.getMessages() != null) {
             java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(result.getMessages());
             filtered.removeIf(m ->

@@ -20,4 +20,8 @@ public class GroupResponse {
     private LocalDateTime createdAt;
     private List<GroupMemberResponse> members;
     private GroupSettingsResponse settings;
+    private boolean disbanded;
+    /** Chỉ điền khi người xem là trưởng/phó nhóm — danh sách chờ duyệt */
+    private java.util.List<PendingJoinRequestResponse> pendingJoinRequests;
+    private int pendingJoinRequestCount;
 }

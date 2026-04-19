@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.dtos.request.AddMembersRequest;
+import iuh.fit.se.minizalobackend.dtos.request.JoinRequestDecisionRequest;
 import iuh.fit.se.minizalobackend.dtos.request.CreateGroupRequest;
 import iuh.fit.se.minizalobackend.dtos.request.MarkReadRequest;
 import iuh.fit.se.minizalobackend.dtos.request.RemoveMembersRequest;
@@ -59,6 +60,24 @@ public class GroupChatController {
                                 request.getMemberIds(),
                                 initiator);
                 return ResponseEntity.ok(updatedGroup);
+        }
+
+        @PostMapping("/join-requests/approve")
+        public ResponseEntity<GroupResponse> approveJoinRequest(
+                        @Valid @RequestBody JoinRequestDecisionRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User approver = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+                return ResponseEntity.ok(groupService.approveJoinRequest(request.getGroupId(), request.getUserId(), approver));
+        }
+
+        @PostMapping("/join-requests/reject")
+        public ResponseEntity<GroupResponse> rejectJoinRequest(
+                        @Valid @RequestBody JoinRequestDecisionRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User approver = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+                return ResponseEntity.ok(groupService.rejectJoinRequest(request.getGroupId(), request.getUserId(), approver));
         }
 
         @DeleteMapping("/members")

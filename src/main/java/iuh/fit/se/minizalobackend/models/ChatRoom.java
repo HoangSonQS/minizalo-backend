@@ -41,4 +41,9 @@ public class ChatRoom {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /** Nhóm đã giải tán: giữ phòng + lịch sử tin nhắn, không cho gửi tin mới. */
+    @Column(name = "disbanded", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private Boolean disbanded = false;
 }

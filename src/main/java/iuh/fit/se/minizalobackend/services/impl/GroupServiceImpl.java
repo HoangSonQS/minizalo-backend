@@ -5,6 +5,7 @@ import iuh.fit.se.minizalobackend.dtos.request.SendGroupMessageRequest;
 import iuh.fit.se.minizalobackend.dtos.request.UpdateGroupRequest;
 import iuh.fit.se.minizalobackend.dtos.response.GroupMemberResponse;
 import iuh.fit.se.minizalobackend.dtos.response.GroupResponse;
+import iuh.fit.se.minizalobackend.dtos.response.PendingJoinRequestResponse;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.GroupChatMessage;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.GroupEventMessage;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.ReadReceiptResponse;
@@ -13,12 +14,14 @@ import iuh.fit.se.minizalobackend.models.ChatRoom;
 import iuh.fit.se.minizalobackend.models.ERoomEventType;
 import iuh.fit.se.minizalobackend.models.ERoomRole;
 import iuh.fit.se.minizalobackend.models.ERoomType;
+import iuh.fit.se.minizalobackend.models.GroupPendingInvitation;
 import iuh.fit.se.minizalobackend.models.GroupEvent;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.repository.BlockedGroupMemberRepository;
+import iuh.fit.se.minizalobackend.repository.GroupPendingInvitationRepository;
 import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
@@ -38,6 +41,7 @@ import org.springframework.util.StringUtils;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -53,6 +57,7 @@ public class GroupServiceImpl implements GroupService {
     private final GroupEventRepository groupEventRepository;
     private final GroupSettingsRepository groupSettingsRepository;
     private final BlockedGroupMemberRepository blockedGroupMemberRepository;
+    private final GroupPendingInvitationRepository groupPendingInvitationRepository;
     private final MessageService messageService;
     private final ModelMapper modelMapper;
     private final SimpMessagingTemplate messagingTemplate;
@@ -224,10 +229,8 @@ public class GroupServiceImpl implements GroupService {
         ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
                 .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
 
-        if (!roomMemberRepository.findByRoomAndUserAndRole(groupChatRoom, initiator, ERoomRole.ADMIN).isPresent() &&
-                !groupChatRoom.getCreatedBy().getId().equals(initiator.getId())) {
-            throw new IllegalArgumentException("Only group admins or owner can add members.");
-        }
+        roomMemberRepository.findByRoomAndUser(groupChatRoom, initiator)
+                .orElseThrow(() -> new IllegalArgumentException("Bạn không phải thành viên nhóm."));
 
         // Không cho thêm user đã bị chặn khỏi nhóm (chỉ có thể thêm lại sau khi bỏ chặn)
         List<UUID> blockedIds = memberIds.stream()
@@ -237,18 +240,47 @@ public class GroupServiceImpl implements GroupService {
             throw new IllegalArgumentException("Không thể thêm thành viên đã bị chặn khỏi nhóm. Vui lòng bỏ chặn trước.");
         }
 
+        iuh.fit.se.minizalobackend.models.GroupSettings groupSettings = groupSettingsRepository.findByGroupId(groupId).orElse(null);
+        boolean requireApproval = groupSettings != null && groupSettings.isRequireApproval();
+        boolean allowNewMemberReadHistory = groupSettings == null || groupSettings.isAllowNewMemberReadHistory();
+
+        /** Trưởng/phó (ADMIN) mời → thêm thẳng; thành viên thường mời vẫn chờ duyệt nếu bật requireApproval. */
+        boolean initiatorIsAdmin = roomMemberRepository.findByRoomAndUser(groupChatRoom, initiator)
+                .map(rm -> rm.getRole() == ERoomRole.ADMIN)
+                .orElse(false);
+
         List<User> usersToAdd = userRepository.findAllById(memberIds);
         List<RoomMember> existingMembers = roomMemberRepository.findAllByRoom(groupChatRoom);
         List<UUID> existingMemberUserIds = existingMembers.stream()
                 .map(roomMember -> roomMember.getUser().getId())
                 .collect(Collectors.toList());
 
+        String initiatorName = displayNameForUser(initiator);
         List<RoomMember> newMembers = new ArrayList<>();
-        for (User user : usersToAdd) {
-            if (!existingMemberUserIds.contains(user.getId())) {
+
+        for (User candidate : usersToAdd) {
+            if (existingMemberUserIds.contains(candidate.getId())) {
+                continue;
+            }
+            if (requireApproval && !initiatorIsAdmin) {
+                if (groupPendingInvitationRepository.existsByGroup_IdAndCandidateUser_Id(groupId, candidate.getId())) {
+                    continue;
+                }
+                GroupPendingInvitation invitation = GroupPendingInvitation.builder()
+                        .group(groupChatRoom)
+                        .candidateUser(candidate)
+                        .invitedBy(initiator)
+                        .build();
+                groupPendingInvitationRepository.save(invitation);
+
+                String candName = displayNameForUser(candidate);
+                String sysMsg = candName + " được " + initiatorName + " mời tham gia nhóm và cần phê duyệt.";
+                sendSystemGroupMessage(groupChatRoom, initiator, sysMsg);
+                broadcastPendingJoinsChanged(groupId);
+            } else {
                 RoomMember roomMember = RoomMember.builder()
                         .room(groupChatRoom)
-                        .user(user)
+                        .user(candidate)
                         .role(ERoomRole.MEMBER)
                         .build();
                 newMembers.add(roomMember);
@@ -259,10 +291,8 @@ public class GroupServiceImpl implements GroupService {
         groupChatRoom.setUpdatedAt(LocalDateTime.now());
         groupRepository.save(groupChatRoom);
 
-        // Publish MEMBER_ADDED events and SYSTEM message
         for (RoomMember member : newMembers) {
-            String initiatorName = initiator.getDisplayName() != null && !initiator.getDisplayName().trim().isEmpty() ? initiator.getDisplayName() : initiator.getUsername();
-            String memberName = member.getUser().getDisplayName() != null && !member.getUser().getDisplayName().trim().isEmpty() ? member.getUser().getDisplayName() : member.getUser().getUsername();
+            String memberName = displayNameForUser(member.getUser());
             String sysMsg = initiatorName + " đã thêm " + memberName + " vào nhóm.";
 
             MessageDynamo message = new MessageDynamo();
@@ -286,11 +316,15 @@ public class GroupServiceImpl implements GroupService {
 
             messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), groupChatMessage);
 
+            // Nếu tắt xem lịch sử: nhắc thành viên mới ngay sau khi được thêm vào
+            if (!allowNewMemberReadHistory) {
+                sendSystemNoticeToUser(groupChatRoom, member.getUser(), "Bạn không thể xem thông tin đoạn chat trước đó.");
+            }
+
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ADDED,
                     sysMsg,
                     member.getUser());
 
-            // Notify the added member to refresh room list (realtime)
             try {
                 messagingTemplate.convertAndSendToUser(
                         member.getUser().getUsername(),
@@ -313,7 +347,7 @@ public class GroupServiceImpl implements GroupService {
         }
 
         List<RoomMember> allMembers = roomMemberRepository.findAllByRoom(groupChatRoom);
-        return buildGroupResponse(groupChatRoom, allMembers);
+        return buildGroupResponse(groupChatRoom, allMembers, initiator);
     }
 
     @Override
@@ -393,7 +427,7 @@ public class GroupServiceImpl implements GroupService {
         }
 
         List<RoomMember> members = roomMemberRepository.findAllByRoom(groupChatRoom);
-        return buildGroupResponse(groupChatRoom, members);
+        return buildGroupResponse(groupChatRoom, members, viewer);
     }
 
     @Override
@@ -405,7 +439,7 @@ public class GroupServiceImpl implements GroupService {
                 .map(roomMember -> {
                     ChatRoom groupChatRoom = roomMember.getRoom();
                     List<RoomMember> membersOfGroup = roomMemberRepository.findAllByRoom(groupChatRoom);
-                    return buildGroupResponse(groupChatRoom, membersOfGroup);
+                    return buildGroupResponse(groupChatRoom, membersOfGroup, user);
                 })
                 .collect(Collectors.toList());
     }
@@ -615,58 +649,98 @@ public class GroupServiceImpl implements GroupService {
             throw new IllegalArgumentException("Only the group owner can disband the group.");
         }
 
+        // Capture members before membership changes (để đẩy realtime sau khi giải tán mềm)
+        List<RoomMember> membersToNotify = roomMemberRepository.findAllByRoom(groupChatRoom);
+
+        groupChatRoom.setDisbanded(true);
+        groupChatRoom.setUpdatedAt(LocalDateTime.now());
+        groupRepository.save(groupChatRoom);
+
         publishGroupEvent(groupChatRoom, ERoomEventType.ROOM_DELETED,
                 "Group '" + groupChatRoom.getName() + "' has been disbanded by the owner.", initiator);
 
-        // Capture members before deletion to push realtime updates
-        List<RoomMember> membersToNotify = roomMemberRepository.findAllByRoom(groupChatRoom);
+        String initiatorDisplayName = initiator.getDisplayName() != null && !initiator.getDisplayName().trim().isEmpty()
+                ? initiator.getDisplayName()
+                : initiator.getUsername();
+        String sysMsg = "Trưởng nhóm " + initiatorDisplayName + " đã giải tán nhóm.";
 
-        // Mọi thành viên đã subscribe /topic/chat/{roomId} — broadcast trước khi xóa DB (ổn định hơn /user/queue)
+        MessageDynamo sysDynamo = new MessageDynamo();
+        sysDynamo.setChatRoomId(groupChatRoom.getId().toString());
+        sysDynamo.setSenderId(initiator.getId().toString());
+        sysDynamo.setSenderName(initiatorDisplayName);
+        sysDynamo.setContent(sysMsg);
+        sysDynamo.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+        MessageDynamo savedSys = messageService.saveMessage(sysDynamo);
+
+        GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                .messageId(savedSys.getMessageId())
+                .groupId(groupChatRoom.getId().toString())
+                .senderId(initiator.getId().toString())
+                .senderUsername(initiatorDisplayName)
+                .content(sysMsg)
+                .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                .timestamp(savedSys.getCreatedAt())
+                .isRecalled(false)
+                .build();
+
+        try {
+            messagingTemplate.convertAndSend("/topic/chat/" + groupId, groupChatMessage);
+        } catch (Exception e) {
+            log.warn("Failed to broadcast SYSTEM disband message: {}", e.getMessage());
+        }
+
         try {
             messagingTemplate.convertAndSend(
                     "/topic/chat/" + groupId.toString(),
-                    "{\"roomListEvent\":\"REMOVED\",\"roomId\":\"" + groupId.toString() + "\"}");
+                    "{\"roomListEvent\":\"DISBANDED\",\"roomId\":\"" + groupId + "\"}");
         } catch (Exception e) {
-            log.warn("Failed to broadcast room REMOVED on chat topic: {}", e.getMessage());
+            log.warn("Failed to broadcast DISBANDED control on chat topic: {}", e.getMessage());
         }
 
-        // Xóa các bảng phụ trước để tránh lỗi FK constraint (vd: blocked_group_members → chat_rooms)
-        messageService.deleteAllMessages(groupChatRoom.getId().toString());
-        blockedGroupMemberRepository.deleteAll(blockedGroupMemberRepository.findByGroup(groupChatRoom));
-        groupSettingsRepository.findByGroupId(groupId).ifPresent(groupSettingsRepository::delete);
-        roomMemberRepository.deleteAll(roomMemberRepository.findAllByRoom(groupChatRoom));
-        groupEventRepository.deleteAll(groupEventRepository.findByGroupIdOrderByCreatedAtDesc(groupId));
-        groupRepository.delete(groupChatRoom);
+        // Trưởng nhóm rời danh sách thành viên; các thành viên khác giữ phòng để đọc lịch sử
+        RoomMember ownerMember = roomMemberRepository.findByRoomAndUser(groupChatRoom, initiator)
+                .orElse(null);
+        if (ownerMember != null) {
+            roomMemberRepository.delete(ownerMember);
+        }
 
-        // Push ROOM_REMOVED to all members (realtime remove from chat list)
+        UUID initiatorId = initiator.getId();
         try {
             for (RoomMember rm : membersToNotify) {
                 User u = rm.getUser();
-                if (u == null) continue;
-                messagingTemplate.convertAndSendToUser(
-                        u.getUsername(),
-                        "/queue/rooms",
-                        "{\"action\":\"REMOVED\",\"roomId\":\"" + groupId.toString() + "\"}"
-                );
+                if (u == null) {
+                    continue;
+                }
+                if (u.getId().equals(initiatorId)) {
+                    messagingTemplate.convertAndSendToUser(
+                            u.getUsername(),
+                            "/queue/rooms",
+                            "{\"action\":\"REMOVED\",\"roomId\":\"" + groupId + "\"}");
+                } else {
+                    messagingTemplate.convertAndSendToUser(
+                            u.getUsername(),
+                            "/queue/rooms",
+                            "{\"action\":\"DISBANDED\",\"roomId\":\"" + groupId + "\"}");
+                }
             }
-            messagingTemplate.convertAndSendToUser(
-                    initiator.getUsername(),
-                    "/queue/rooms",
-                    "{\"action\":\"REMOVED\",\"roomId\":\"" + groupId.toString() + "\"}"
-            );
         } catch (Exception e) {
-            log.warn("Failed to push room REMOVED updates: {}", e.getMessage());
+            log.warn("Failed to push room disband updates: {}", e.getMessage());
         }
 
         return new MessageResponse("Group disbanded successfully.");
     }
 
     private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers) {
+        return buildGroupResponse(chatRoom, roomMembers, null);
+    }
+
+    private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers, User viewerForPending) {
         GroupResponse response = modelMapper.map(chatRoom, GroupResponse.class);
         response.setId(chatRoom.getId().toString());
         response.setGroupName(chatRoom.getName());
         response.setAvatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()));
         response.setOwnerId(chatRoom.getCreatedBy().getId().toString());
+        response.setDisbanded(chatRoom.getDisbanded() != null && chatRoom.getDisbanded());
 
         List<GroupMemberResponse> memberResponses = roomMembers.stream()
                 .map(roomMember -> {
@@ -686,7 +760,106 @@ public class GroupServiceImpl implements GroupService {
             response.setSettings(settingsResponse);
         });
 
+        if (viewerForPending != null && canApprovePendingMembership(chatRoom, viewerForPending)) {
+            List<GroupPendingInvitation> pendings = groupPendingInvitationRepository.findByGroup_IdOrderByCreatedAtAsc(chatRoom.getId());
+            List<PendingJoinRequestResponse> list = pendings.stream()
+                    .map(this::mapPendingInvitation)
+                    .collect(Collectors.toList());
+            response.setPendingJoinRequests(list);
+            response.setPendingJoinRequestCount(list.size());
+        } else {
+            response.setPendingJoinRequests(Collections.emptyList());
+            response.setPendingJoinRequestCount(0);
+        }
+
         return response;
+    }
+
+    private boolean canApprovePendingMembership(ChatRoom room, User viewer) {
+        if (room.getCreatedBy().getId().equals(viewer.getId())) {
+            return true;
+        }
+        return roomMemberRepository.findByRoomAndUserAndRole(room, viewer, ERoomRole.ADMIN).isPresent();
+    }
+
+    private PendingJoinRequestResponse mapPendingInvitation(GroupPendingInvitation inv) {
+        User c = inv.getCandidateUser();
+        User inviter = inv.getInvitedBy();
+        return PendingJoinRequestResponse.builder()
+                .userId(c.getId().toString())
+                .username(c.getUsername())
+                .displayName(displayNameForUser(c))
+                .avatarUrl(minioService.ensurePublicUrl(c.getAvatarUrl()))
+                .invitedByUserId(inviter != null ? inviter.getId().toString() : null)
+                .invitedByDisplayName(inviter != null ? displayNameForUser(inviter) : null)
+                .build();
+    }
+
+    private String displayNameForUser(User u) {
+        if (u == null) {
+            return "";
+        }
+        String d = u.getDisplayName();
+        return (d != null && !d.trim().isEmpty()) ? d.trim() : u.getUsername();
+    }
+
+    private void sendSystemGroupMessage(ChatRoom groupChatRoom, User actor, String sysMsg) {
+        String actorName = displayNameForUser(actor);
+        MessageDynamo message = new MessageDynamo();
+        message.setChatRoomId(groupChatRoom.getId().toString());
+        message.setSenderId(actor.getId().toString());
+        message.setSenderName(actorName);
+        message.setContent(sysMsg);
+        message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+        MessageDynamo savedMessage = messageService.saveMessage(message);
+
+        GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                .messageId(savedMessage.getMessageId())
+                .groupId(groupChatRoom.getId().toString())
+                .senderId(actor.getId().toString())
+                .senderUsername(actorName)
+                .content(sysMsg)
+                .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                .timestamp(savedMessage.getCreatedAt())
+                .isRecalled(false)
+                .build();
+        messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), groupChatMessage);
+    }
+
+    /**
+     * Thông báo hệ thống CHỈ gửi cho 1 user (không lưu Dynamo, không broadcast toàn nhóm),
+     * dùng cho các nhắc riêng như "không thể xem lịch sử".
+     */
+    private void sendSystemNoticeToUser(ChatRoom groupChatRoom, User targetUser, String sysMsg) {
+        try {
+            // Gửi qua user-queue để đảm bảo chỉ đúng user nhận được (Spring user-destination)
+            messagingTemplate.convertAndSendToUser(
+                    targetUser.getUsername(),
+                    "/queue/chat-notices",
+                    java.util.Map.of(
+                    "messageId", java.util.UUID.randomUUID().toString(),
+                    "roomId", groupChatRoom.getId().toString(),
+                    "senderId", "SYSTEM",
+                    "senderName", "SYSTEM",
+                    "senderUsername", "SYSTEM",
+                    "content", sysMsg,
+                    "type", AppConstants.MESSAGE_TYPE_SYSTEM,
+                    "timestamp", java.time.Instant.now().toString()
+                    )
+            );
+        } catch (Exception e) {
+            log.warn("Failed to sendSystemNoticeToUser: {}", e.getMessage());
+        }
+    }
+
+    private void broadcastPendingJoinsChanged(UUID groupId) {
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + groupId,
+                    "{\"roomListEvent\":\"PENDING_JOINS_CHANGED\",\"roomId\":\"" + groupId + "\"}");
+        } catch (Exception e) {
+            log.warn("Failed to broadcast PENDING_JOINS_CHANGED: {}", e.getMessage());
+        }
     }
 
     private void publishGroupEvent(ChatRoom groupChatRoom, ERoomEventType eventType, String message,
@@ -730,12 +903,39 @@ public class GroupServiceImpl implements GroupService {
         groupChatRoom.setUpdatedAt(LocalDateTime.now());
         groupRepository.save(groupChatRoom);
 
-        // Publish MEMBER_ROLE_CHANGED event
-        String roleLabel = newRole == ERoomRole.ADMIN ? "phó nhóm" : "thành viên";
-        publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ROLE_CHANGED,
-                initiator.getUsername() + " đã thay đổi quyền của " + targetMember.getUser().getUsername()
-                        + " thành " + roleLabel + ".",
-                targetMember.getUser());
+        String initiatorName = initiator.getDisplayName() != null && !initiator.getDisplayName().trim().isEmpty()
+                ? initiator.getDisplayName()
+                : initiator.getUsername();
+        User targetUser = targetMember.getUser();
+        String targetName = targetUser.getDisplayName() != null && !targetUser.getDisplayName().trim().isEmpty()
+                ? targetUser.getDisplayName()
+                : targetUser.getUsername();
+        String sysMsg = newRole == ERoomRole.ADMIN
+                ? initiatorName + " đã phong " + targetName + " làm phó nhóm."
+                : initiatorName + " đã xóa quyền phó nhóm của " + targetName + ".";
+
+        MessageDynamo roleMsg = new MessageDynamo();
+        roleMsg.setChatRoomId(groupChatRoom.getId().toString());
+        roleMsg.setSenderId(initiator.getId().toString());
+        roleMsg.setSenderName(initiatorName);
+        roleMsg.setContent(sysMsg);
+        roleMsg.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+        MessageDynamo savedRoleMsg = messageService.saveMessage(roleMsg);
+
+        GroupChatMessage roleChatPayload = GroupChatMessage.builder()
+                .messageId(savedRoleMsg.getMessageId())
+                .groupId(groupChatRoom.getId().toString())
+                .senderId(initiator.getId().toString())
+                .senderUsername(initiatorName)
+                .content(sysMsg)
+                .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                .timestamp(savedRoleMsg.getCreatedAt())
+                .isRecalled(false)
+                .build();
+
+        messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), roleChatPayload);
+
+        publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ROLE_CHANGED, sysMsg, targetUser);
 
         List<RoomMember> members = roomMemberRepository.findAllByRoom(groupChatRoom);
         return buildGroupResponse(groupChatRoom, members);
@@ -786,7 +986,12 @@ public class GroupServiceImpl implements GroupService {
         if (request.getAllowMemberPin() != null) settings.setAllowMemberPin(request.getAllowMemberPin());
         if (request.getAllowMemberCreatePoll() != null) settings.setAllowMemberCreatePoll(request.getAllowMemberCreatePoll());
         if (request.getAllowMemberSendMessage() != null) settings.setAllowMemberSendMessage(request.getAllowMemberSendMessage());
-        if (request.getRequireApproval() != null) settings.setRequireApproval(request.getRequireApproval());
+        if (request.getRequireApproval() != null) {
+            if (!isOwner) {
+                throw new IllegalArgumentException("Only the group owner can enable or disable member approval.");
+            }
+            settings.setRequireApproval(request.getRequireApproval());
+        }
         if (request.getAllowNewMemberReadHistory() != null) settings.setAllowNewMemberReadHistory(request.getAllowNewMemberReadHistory());
         if (request.getAllowJoinByLink() != null) settings.setAllowJoinByLink(request.getAllowJoinByLink());
 
@@ -794,7 +999,20 @@ public class GroupServiceImpl implements GroupService {
         groupChatRoom.setUpdatedAt(LocalDateTime.now());
         groupRepository.save(groupChatRoom);
 
-        return modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
+        iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse resp =
+                modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
+
+        // Realtime: broadcast settings update để web/mobile sync ngay
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + groupChatRoom.getId().toString() + "/settings",
+                    resp
+            );
+        } catch (Exception e) {
+            log.warn("Failed to broadcast group settings update: {}", e.getMessage());
+        }
+
+        return resp;
     }
 
     @Override
@@ -858,11 +1076,48 @@ public class GroupServiceImpl implements GroupService {
                     .blockedBy(initiator)
                     .build();
             blockedGroupMemberRepository.save(blocked);
-            
+
             // Remove them if they are in the group
             roomMemberRepository.findByRoomAndUser(groupChatRoom, targetUser).ifPresent(roomMemberRepository::delete);
-            
-            String sysMsg = initiator.getUsername() + " đã chặn " + targetUser.getUsername() + " khỏi nhóm.";
+
+            String initiatorName = initiator.getDisplayName() != null && !initiator.getDisplayName().trim().isEmpty()
+                    ? initiator.getDisplayName()
+                    : initiator.getUsername();
+            String targetName = targetUser.getDisplayName() != null && !targetUser.getDisplayName().trim().isEmpty()
+                    ? targetUser.getDisplayName()
+                    : targetUser.getUsername();
+            String sysMsg = initiatorName + " đã chặn " + targetName + " khỏi nhóm.";
+
+            MessageDynamo blockSys = new MessageDynamo();
+            blockSys.setChatRoomId(groupChatRoom.getId().toString());
+            blockSys.setSenderId(initiator.getId().toString());
+            blockSys.setSenderName(initiatorName);
+            blockSys.setContent(sysMsg);
+            blockSys.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo savedBlockMsg = messageService.saveMessage(blockSys);
+
+            GroupChatMessage blockChatPayload = GroupChatMessage.builder()
+                    .messageId(savedBlockMsg.getMessageId())
+                    .groupId(groupChatRoom.getId().toString())
+                    .senderId(initiator.getId().toString())
+                    .senderUsername(initiatorName)
+                    .content(sysMsg)
+                    .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                    .timestamp(savedBlockMsg.getCreatedAt())
+                    .isRecalled(false)
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId().toString(), blockChatPayload);
+
+            try {
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + groupChatRoom.getId().toString(),
+                        "{\"roomListEvent\":\"REMOVED\",\"roomId\":\"" + groupChatRoom.getId()
+                                + "\",\"forUserId\":\"" + targetUserId + "\"}");
+            } catch (Exception e) {
+                log.warn("Failed to broadcast room REMOVED for blocked user: {}", e.getMessage());
+            }
+
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_REMOVED, sysMsg, targetUser);
         }
     }
@@ -921,10 +1176,27 @@ public class GroupServiceImpl implements GroupService {
         }
 
         if (roomMemberRepository.existsByRoomAndUser(group, user)) {
-            return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group));
+            return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group), user);
         }
 
-        // Add user
+        if (settings.isRequireApproval()) {
+            if (groupPendingInvitationRepository.existsByGroup_IdAndCandidateUser_Id(group.getId(), user.getId())) {
+                return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group), user);
+            }
+            GroupPendingInvitation invitation = GroupPendingInvitation.builder()
+                    .group(group)
+                    .candidateUser(user)
+                    .invitedBy(null)
+                    .build();
+            groupPendingInvitationRepository.save(invitation);
+
+            String candName = displayNameForUser(user);
+            String sysMsg = candName + " đã xin tham gia nhóm qua link và cần phê duyệt.";
+            sendSystemGroupMessage(group, user, sysMsg);
+            broadcastPendingJoinsChanged(group.getId());
+            return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group), user);
+        }
+
         RoomMember member = RoomMember.builder()
                 .room(group)
                 .user(user)
@@ -933,9 +1205,98 @@ public class GroupServiceImpl implements GroupService {
         roomMemberRepository.save(member);
 
         String sysMsg = user.getUsername() + " đã tham gia nhóm bằng link.";
+        // Nếu tắt xem lịch sử: nhắc thành viên mới ngay sau khi tham gia
+        if (!settings.isAllowNewMemberReadHistory()) {
+            sendSystemNoticeToUser(group, user, "Bạn không thể xem thông tin đoạn chat trước đó.");
+        }
         publishGroupEvent(group, ERoomEventType.MEMBER_ADDED, sysMsg, user);
 
-        return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group));
+        return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group), user);
+    }
+
+    @Override
+    @Transactional
+    public GroupResponse approveJoinRequest(UUID groupId, UUID candidateUserId, User approver) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+        if (!canApprovePendingMembership(groupChatRoom, approver)) {
+            throw new IllegalArgumentException("Chỉ trưởng nhóm hoặc phó nhóm mới có thể phê duyệt thành viên.");
+        }
+        GroupPendingInvitation inv = groupPendingInvitationRepository
+                .findByGroup_IdAndCandidateUser_Id(groupId, candidateUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu chờ duyệt."));
+
+        User candidate = inv.getCandidateUser();
+        groupPendingInvitationRepository.delete(inv);
+
+        if (roomMemberRepository.existsByRoomAndUser(groupChatRoom, candidate)) {
+            return buildGroupResponse(groupChatRoom, roomMemberRepository.findAllByRoom(groupChatRoom), approver);
+        }
+
+        RoomMember newMember = RoomMember.builder()
+                .room(groupChatRoom)
+                .user(candidate)
+                .role(ERoomRole.MEMBER)
+                .build();
+        roomMemberRepository.save(newMember);
+
+        groupChatRoom.setUpdatedAt(LocalDateTime.now());
+        groupRepository.save(groupChatRoom);
+
+        String approverName = displayNameForUser(approver);
+        String candName = displayNameForUser(candidate);
+        String sysMsg = approverName + " đã phê duyệt " + candName + " tham gia nhóm.";
+        sendSystemGroupMessage(groupChatRoom, approver, sysMsg);
+        // Nếu tắt xem lịch sử: nhắc thành viên mới ngay sau khi được duyệt
+        iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(groupId).orElse(null);
+        if (settings != null && !settings.isAllowNewMemberReadHistory()) {
+            sendSystemNoticeToUser(groupChatRoom, candidate, "Bạn không thể xem thông tin đoạn chat trước đó.");
+        }
+        publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ADDED, sysMsg, candidate);
+
+        try {
+            messagingTemplate.convertAndSendToUser(
+                    candidate.getUsername(),
+                    "/queue/rooms",
+                    "{\"action\":\"ADDED\",\"roomId\":\"" + groupChatRoom.getId() + "\"}");
+        } catch (Exception e) {
+            log.warn("Failed to push room ADDED for approved user: {}", e.getMessage());
+        }
+
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + groupChatRoom.getId(),
+                    "{\"roomListEvent\":\"ADDED\",\"roomId\":\"" + groupChatRoom.getId() + "\"}");
+        } catch (Exception e) {
+            log.warn("Failed to broadcast ADDED after approve: {}", e.getMessage());
+        }
+
+        broadcastPendingJoinsChanged(groupId);
+        return buildGroupResponse(groupChatRoom, roomMemberRepository.findAllByRoom(groupChatRoom), approver);
+    }
+
+    @Override
+    @Transactional
+    public GroupResponse rejectJoinRequest(UUID groupId, UUID candidateUserId, User approver) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+        if (!canApprovePendingMembership(groupChatRoom, approver)) {
+            throw new IllegalArgumentException("Chỉ trưởng nhóm hoặc phó nhóm mới có thể từ chối yêu cầu.");
+        }
+        GroupPendingInvitation inv = groupPendingInvitationRepository
+                .findByGroup_IdAndCandidateUser_Id(groupId, candidateUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu chờ duyệt."));
+
+        User candidate = inv.getCandidateUser();
+        groupPendingInvitationRepository.delete(inv);
+
+        String approverName = displayNameForUser(approver);
+        String candName = displayNameForUser(candidate);
+        String sysMsg = approverName + " đã từ chối yêu cầu tham gia của " + candName + ".";
+        sendSystemGroupMessage(groupChatRoom, approver, sysMsg);
+
+        broadcastPendingJoinsChanged(groupId);
+        return buildGroupResponse(groupChatRoom, roomMemberRepository.findAllByRoom(groupChatRoom), approver);
     }
 
     @Override
