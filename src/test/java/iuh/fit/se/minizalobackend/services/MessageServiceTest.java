@@ -40,9 +40,6 @@ class MessageServiceTest {
     private RoomMemberRepository roomMemberRepository;
 
     @Mock
-    private UserPresenceService userPresenceService;
-
-    @Mock
     private NotificationService notificationService;
 
     @Mock

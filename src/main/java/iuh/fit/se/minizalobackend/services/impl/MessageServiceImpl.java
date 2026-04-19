@@ -16,7 +16,6 @@ import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.NotificationService;
-import iuh.fit.se.minizalobackend.services.UserPresenceService;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
@@ -45,7 +44,6 @@ public class MessageServiceImpl implements MessageService {
     private final RoomMemberRepository roomMemberRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final FriendRepository friendRepository;
-    private final UserPresenceService userPresenceService;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
     private final AnalyticsService analyticsService;
@@ -226,18 +224,17 @@ public class MessageServiceImpl implements MessageService {
                     UUID recipientId = member.getUser().getId();
                     // Don't notify the sender
                     if (!recipientId.equals(senderId)) {
-                        if (!userPresenceService.isUserOnline(recipientId)) {
-                            String fcmToken = member.getUser().getFcmToken();
-                            if (fcmToken != null && !fcmToken.isEmpty()) {
-                                log.debug("Sending push notification to offline user: {}", recipientId);
-                                notificationService.sendNotification(
-                                        recipientId,
-                                        fcmToken,
-                                        "New Message",
-                                        "You have a new message from " + message.getSenderName(),
-                                        message.getChatRoomId(),
-                                        message.getSenderName());
-                            }
+                        // Luôn gửi push khi có token: WS vẫn coi user "online" khi app chạy nền → trước đây không có FCM.
+                        String fcmToken = member.getUser().getFcmToken();
+                        if (fcmToken != null && !fcmToken.isEmpty()) {
+                            log.debug("Sending push notification to user: {}", recipientId);
+                            notificationService.sendNotification(
+                                    recipientId,
+                                    fcmToken,
+                                    "New Message",
+                                    "You have a new message from " + message.getSenderName(),
+                                    message.getChatRoomId(),
+                                    message.getSenderName());
                         }
                     }
                 }
@@ -396,6 +393,11 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private String determineMessageType(ChatMessageRequest request) {
+        String explicit = request.getType();
+        if (explicit != null && !explicit.isBlank()
+                && (explicit.startsWith("CALL_") || explicit.equals(AppConstants.MESSAGE_TYPE_SYSTEM))) {
+            return explicit;
+        }
         if (request.getAttachments() == null || request.getAttachments().isEmpty()) {
             return AppConstants.MESSAGE_TYPE_TEXT;
         }
