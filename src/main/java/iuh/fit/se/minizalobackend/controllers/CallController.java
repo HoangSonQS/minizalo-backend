@@ -231,9 +231,12 @@ public class CallController {
         session.setEndedAt(LocalDateTime.now());
         callSessionRepository.save(session);
 
-        // Gửi tin nhắn log vào Chat Room (chỉ khi cuộc gọi đã ACTIVE)
+        // Gửi tin nhắn log vào phòng chat
         if (oldStatus == ECallStatus.ACTIVE) {
             sendCallLogMessage(session, "ENDED");
+        } else if (oldStatus == ECallStatus.PENDING) {
+            // Còn đổ chuông / đang kết nối mà kết thúc → giống huỷ/không nhấc máy → một tin MISSED trong thread
+            sendCallLogMessage(session, "MISSED");
         }
 
         UUID otherId = userId.equals(session.getCallerId()) ? session.getReceiverId() : session.getCallerId();
