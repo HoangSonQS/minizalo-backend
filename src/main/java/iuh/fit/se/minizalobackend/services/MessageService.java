@@ -13,6 +13,9 @@ public interface MessageService {
 
     PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit);
 
+    /** Lấy history với filter theo thời điểm join (khi nhóm tắt xem lịch sử). */
+    PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit, String viewerId);
+
     void recallMessage(String chatRoomId, String messageId);
 
     void recallMessage(String chatRoomId, String messageId, String requesterId);
@@ -26,6 +29,9 @@ public interface MessageService {
     void pinMessage(String chatRoomId, String messageId, boolean pin);
 
     void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType);
+
+    /** Pin/unpin với actorId để check permission chính xác (không phụ thuộc displayName). */
+    void pinMessage(String chatRoomId, String messageId, boolean pin, String actorId, String actorName, String messageType);
 
     PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit);
 

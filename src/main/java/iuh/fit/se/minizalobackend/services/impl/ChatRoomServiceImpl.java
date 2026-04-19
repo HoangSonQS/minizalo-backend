@@ -13,6 +13,7 @@ import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
 import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.ChatRoomService;
+import iuh.fit.se.minizalobackend.services.GroupService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     private final ObjectMapper objectMapper;
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
     private final iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository;
+    private final GroupService groupService;
 
     public ChatRoomServiceImpl(ChatRoomRepository chatRoomRepository,
             RoomMemberRepository roomMemberRepository,
@@ -40,7 +42,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
             UserService userService,
             ObjectMapper objectMapper,
             iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository,
-            iuh.fit.se.minizalobackend.services.MinioService minioService) {
+            iuh.fit.se.minizalobackend.services.MinioService minioService,
+            GroupService groupService) {
         this.chatRoomRepository = chatRoomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.groupEventRepository = groupEventRepository;
@@ -48,6 +51,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         this.objectMapper = objectMapper;
         this.messageDynamoRepository = messageDynamoRepository;
         this.minioService = minioService;
+        this.groupService = groupService;
     }
 
     private UserResponse convertToUserResponse(User user) {
@@ -126,70 +130,17 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .createdBy(convertToUserResponse(createdBy))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
+                .disbanded(chatRoom.getDisbanded() != null && chatRoom.getDisbanded())
                 .build();
     }
 
     @Override
     @Transactional
     public ChatRoomResponse addMembersToGroup(UUID groupId, List<UUID> newMemberIds, User actor) {
-        ChatRoom chatRoom = chatRoomRepository.findById(groupId)
+        chatRoomRepository.findById(groupId)
                 .orElseThrow(() -> new ChatRoomNotFoundException("Group chat with ID " + groupId + " not found."));
-
-        // Check if actor is an admin
-        RoomMember actorMember = roomMemberRepository.findByRoomAndUser(chatRoom, actor)
-                .orElseThrow(() -> new UnauthorizedRoomAccessException("You are not a member of this group."));
-        if (actorMember.getRole() != ERoomRole.ADMIN) {
-            throw new UnauthorizedRoomAccessException("Only group admins can add members.");
-        }
-
-        List<RoomMember> existingMembers = roomMemberRepository.findAllByRoom(chatRoom);
-        Set<UUID> existingMemberUserIds = existingMembers.stream()
-                .map(member -> member.getUser().getId())
-                .collect(Collectors.toSet());
-
-        List<RoomMember> addedMembers = new ArrayList<>();
-        List<User> newUsersAdded = new ArrayList<>();
-
-        for (UUID memberId : newMemberIds) {
-            if (existingMemberUserIds.contains(memberId)) {
-                // Optionally throw UserAlreadyInRoomException or just skip
-                continue;
-            }
-
-            Optional<User> userOptional = userService.getUserById(memberId);
-            userOptional.ifPresent(user -> {
-                RoomMember newMember = RoomMember.builder()
-                        .room(chatRoom)
-                        .user(user)
-                        .role(ERoomRole.MEMBER)
-                        .build();
-                addedMembers.add(newMember);
-                newUsersAdded.add(user);
-            });
-        }
-
-        roomMemberRepository.saveAll(addedMembers);
-
-        if (!addedMembers.isEmpty()) {
-            // Create GroupEvent for members added
-            String metadata = null;
-            try {
-                metadata = objectMapper.writeValueAsString(Map.of(
-                        "addedBy", actor.getDisplayName(),
-                        "addedMembers", newUsersAdded.stream().map(User::getDisplayName).collect(Collectors.toList())));
-            } catch (JsonProcessingException e) {
-                // Log error
-            }
-            GroupEvent memberAddedEvent = GroupEvent.builder()
-                    .group(chatRoom)
-                    .user(actor)
-                    .eventType(ERoomEventType.MEMBER_ADDED)
-                    .metadata(metadata)
-                    .build();
-            groupEventRepository.save(memberAddedEvent);
-        }
-
-        return getGroupChatDetails(groupId); // Refresh and return updated details
+        groupService.addMembersToGroup(groupId, newMemberIds, actor);
+        return getGroupChatDetails(groupId);
     }
 
     @Override
@@ -359,6 +310,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .createdBy(convertToUserResponse(chatRoom.getCreatedBy()))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
+                .disbanded(chatRoom.getDisbanded() != null && chatRoom.getDisbanded())
                 .build();
     }
 

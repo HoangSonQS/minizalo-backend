@@ -3,6 +3,7 @@ package iuh.fit.se.minizalobackend.services.impl;
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
+import iuh.fit.se.minizalobackend.models.GroupSettings;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
 import iuh.fit.se.minizalobackend.models.EFriendStatus;
 import iuh.fit.se.minizalobackend.models.EPrivacyAudience;
@@ -41,6 +42,7 @@ import java.util.UUID;
 @Slf4j
 @RequiredArgsConstructor
 public class MessageServiceImpl implements MessageService {
+    private static final String NO_HISTORY_NOTICE_VI = "Bạn không thể xem thông tin đoạn chat trước đó.";
 
     private final MessageDynamoRepository messageDynamoRepository;
     private final GroupRepository groupRepository;
@@ -101,6 +103,10 @@ public class MessageServiceImpl implements MessageService {
 
         UUID targetUuid = UUID.fromString(targetRoomId);
         Optional<ChatRoom> targetRoomOpt = chatRoomRepository.findById(targetUuid);
+        if (targetRoomOpt.isPresent() && targetRoomOpt.get().getType() == ERoomType.GROUP
+                && Boolean.TRUE.equals(targetRoomOpt.get().getDisbanded())) {
+            throw new IllegalArgumentException("Nhóm đã bị giải tán — không thể chuyển tiếp tin nhắn.");
+        }
         if (targetRoomOpt.isPresent() && targetRoomOpt.get().getType() == ERoomType.DIRECT) {
             List<RoomMember> tMembers = roomMemberRepository.findAllByRoomWithUsersFetched(targetRoomOpt.get());
             Optional<User> otherOpt = tMembers.stream()
@@ -171,6 +177,38 @@ public class MessageServiceImpl implements MessageService {
             if (!exists) {
                 throw new IllegalArgumentException("Reply target message not found in this room");
             }
+        }
+
+        try {
+            UUID receiverUuid = UUID.fromString(request.getReceiverId());
+            chatRoomRepository.findById(receiverUuid).ifPresent(room -> {
+                if (room.getType() == ERoomType.GROUP && Boolean.TRUE.equals(room.getDisbanded())) {
+                    throw new IllegalArgumentException("Nhóm đã bị giải tán — không thể gửi tin nhắn.");
+                }
+
+                // Permission: group send message
+                if (room.getType() == ERoomType.GROUP) {
+                    iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository
+                            .findByGroupId(room.getId()).orElse(null);
+                    if (settings != null && !settings.isAllowMemberSendMessage()) {
+                        RoomMember member = roomMemberRepository.findByRoomAndUser(room, sender)
+                                .orElseThrow(() -> new IllegalArgumentException("Bạn không phải thành viên nhóm."));
+                        boolean isOwner = room.getCreatedBy() != null && room.getCreatedBy().getId().equals(sender.getId());
+                        boolean isAdmin = member.getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
+                        if (!isOwner && !isAdmin) {
+                            throw new IllegalArgumentException("Chỉ trưởng nhóm và phó nhóm được phép gửi tin nhắn.");
+                        }
+                    }
+                }
+            });
+        } catch (IllegalArgumentException ex) {
+            if ("Nhóm đã bị giải tán — không thể gửi tin nhắn.".equals(ex.getMessage())) {
+                throw ex;
+            }
+            if ("Chỉ trưởng nhóm và phó nhóm được phép gửi tin nhắn.".equals(ex.getMessage())) {
+                throw ex;
+            }
+            // UUID không hợp lệ hoặc format khác — không chặn gửi tin tại đây
         }
 
         MessageDynamo message = new MessageDynamo();
@@ -248,6 +286,59 @@ public class MessageServiceImpl implements MessageService {
 
         log.info("Found {} messages for room {}", result.getMessages().size(), roomId);
         return result;
+    }
+
+    @Override
+    public PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit, String viewerId) {
+        PaginatedMessageResult raw = getRoomMessages(roomId, lastKey, limit);
+        if (raw.getMessages() == null || raw.getMessages().isEmpty()) {
+            return raw;
+        }
+
+        try {
+            ChatRoom room = chatRoomRepository.findById(roomId).orElse(null);
+            if (room == null || room.getType() != ERoomType.GROUP) {
+                return raw;
+            }
+            if (viewerId == null || viewerId.isBlank()) {
+                return raw;
+            }
+
+            GroupSettings settings = groupSettingsRepository.findByGroupId(roomId).orElse(null);
+            if (settings == null || settings.isAllowNewMemberReadHistory()) {
+                return raw;
+            }
+
+            User viewer = userRepository.findById(UUID.fromString(viewerId)).orElse(null);
+            if (viewer == null) return raw;
+
+            RoomMember membership = roomMemberRepository.findByRoomAndUser(room, viewer).orElse(null);
+            if (membership == null || membership.getJoinedAt() == null) return raw;
+
+            java.time.Instant joinedAt = membership.getJoinedAt().atZone(java.time.ZoneId.systemDefault()).toInstant();
+            List<MessageDynamo> filtered = raw.getMessages().stream()
+                    // Không trả về "notice" dạng SYSTEM đã từng bị lưu (cũ) — notice này chỉ dành cho người vào sau qua WS cá nhân
+                    .filter(m -> {
+                        try {
+                            return !(NO_HISTORY_NOTICE_VI.equals(String.valueOf(m.getContent()))
+                                    && AppConstants.MESSAGE_TYPE_SYSTEM.equals(m.getType()));
+                        } catch (Exception e) {
+                            return true;
+                        }
+                    })
+                    .filter(m -> {
+                        try {
+                            return java.time.Instant.parse(m.getCreatedAt()).compareTo(joinedAt) >= 0;
+                        } catch (Exception e) {
+                            return true;
+                        }
+                    })
+                    .toList();
+            return new PaginatedMessageResult(filtered, raw.getLastEvaluatedKey());
+        } catch (Exception e) {
+            // Fail-open: nếu lỗi parse/jpa thì không chặn history để tránh crash
+            return raw;
+        }
     }
 
     @Override
@@ -359,6 +450,11 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType) {
+        pinMessage(chatRoomId, messageId, pin, null, actorName, messageType);
+    }
+
+    @Override
+    public void pinMessage(String chatRoomId, String messageId, boolean pin, String actorId, String actorName, String messageType) {
         messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
             if (pin && !message.isPinned()) {
                 long pinnedCount = messageDynamoRepository.countPinnedMessages(chatRoomId);
@@ -369,24 +465,31 @@ public class MessageServiceImpl implements MessageService {
 
             // Permission check for groups
             chatRoomRepository.findById(java.util.UUID.fromString(chatRoomId)).ifPresent(room -> {
-                if (room.getType() == ERoomType.GROUP && actorName != null && !actorName.isBlank()
-                        && !actorName.equals("Ai đó")) {
+                if (room.getType() == ERoomType.GROUP) {
                     iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository
                             .findByGroupId(room.getId()).orElse(null);
                     if (settings != null && !settings.isAllowMemberPin()) {
-                        // find the sender room member
-                        userRepository.findByUsername(actorName).or(() -> userRepository.findByUsername(actorName))
-                                .ifPresent(u -> {
-                                    roomMemberRepository.findByRoomAndUser(room, u).ifPresent(member -> {
-                                        boolean isOwner = room.getCreatedBy().getId().equals(u.getId());
-                                        boolean isAdmin = member
-                                                .getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
-                                        if (!isOwner && !isAdmin) {
-                                            throw new IllegalStateException(
-                                                    "Only admins can pin messages in this group.");
-                                        }
-                                    });
-                                });
+                        // actorId ưu tiên; fallback actorName (cũ)
+                        User actor = null;
+                        try {
+                            if (actorId != null && !actorId.isBlank()) {
+                                actor = userRepository.findById(java.util.UUID.fromString(actorId)).orElse(null);
+                            }
+                        } catch (Exception ignored) {}
+                        if (actor == null && actorName != null && !actorName.isBlank() && !actorName.equals("Ai đó")) {
+                            actor = userRepository.findByUsername(actorName).orElse(null);
+                        }
+                        if (actor != null) {
+                            RoomMember member = roomMemberRepository.findByRoomAndUser(room, actor)
+                                    .orElseThrow(() -> new IllegalStateException("Bạn không phải thành viên nhóm."));
+                            boolean isOwner = room.getCreatedBy() != null && room.getCreatedBy().getId().equals(actor.getId());
+                            boolean isAdmin = member.getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
+                            if (!isOwner && !isAdmin) {
+                                throw new IllegalStateException("Chỉ trưởng nhóm và phó nhóm được phép ghim tin nhắn.");
+                            }
+                        } else {
+                            throw new IllegalStateException("Không xác định được người ghim tin nhắn.");
+                        }
                     }
                 }
             });
