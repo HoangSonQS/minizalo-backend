@@ -9,6 +9,8 @@ import java.util.UUID;
 public interface MessageService {
     MessageDynamo saveMessage(MessageDynamo message);
 
+    void deleteAllMessages(String chatRoomId);
+
     PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit);
 
     void recallMessage(String chatRoomId, String messageId);
@@ -23,13 +25,16 @@ public interface MessageService {
 
     void pinMessage(String chatRoomId, String messageId, boolean pin);
 
+    void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType);
+
     PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit);
 
     MessageDynamo forwardMessage(String originalRoomId, String originalMessageId, String targetRoomId, String senderId);
 
     MessageDynamo processMessage(ChatMessageRequest request, String senderId);
 
-    SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey);
+    SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey,
+            String senderId, String fromDateInclusive, String toDateInclusive);
 
     /**
      * Tìm kiếm tin nhắn toàn cục trên tất cả các phòng mà userId là thành viên.

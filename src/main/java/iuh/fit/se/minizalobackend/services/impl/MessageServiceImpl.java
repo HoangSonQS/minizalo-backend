@@ -14,6 +14,7 @@ import iuh.fit.se.minizalobackend.models.ERoomType;
 import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
+import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.NotificationService;
@@ -49,9 +50,16 @@ public class MessageServiceImpl implements MessageService {
     private final UserPresenceService userPresenceService;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final GroupSettingsRepository groupSettingsRepository;
     private final AnalyticsService analyticsService;
     private final UserRepository userRepository;
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
+
+    @Override
+    public void deleteAllMessages(String chatRoomId) {
+        log.info("Deleting all messages for room: {}", chatRoomId);
+        messageDynamoRepository.deleteAllByRoomId(chatRoomId);
+    }
 
     @Override
     @org.springframework.transaction.annotation.Transactional
@@ -66,12 +74,17 @@ public class MessageServiceImpl implements MessageService {
         log.debug("Saving message to DynamoDB for chat room: {}", message.getChatRoomId());
         messageDynamoRepository.save(message);
 
-        // Log activity
-        analyticsService.logActivity(UUID.fromString(message.getSenderId()), AppConstants.ACTIVITY_MESSAGE_SENT,
-                "Message sent to room: " + message.getChatRoomId());
+        // Log activity (skip for SYSTEM messages)
+        if (!"SYSTEM".equals(message.getSenderId())) {
+            analyticsService.logActivity(UUID.fromString(message.getSenderId()), AppConstants.ACTIVITY_MESSAGE_SENT,
+                    "Message sent to room: " + message.getChatRoomId());
+        }
 
-        // Trigger notifications for offline members
-        triggerNotifications(message);
+        // Trigger notifications for offline members (skip for SYSTEM/privacy-blocked
+        // messages)
+        if (!"SYSTEM".equals(message.getSenderId()) && !message.isPrivacyBlocked()) {
+            triggerNotifications(message);
+        }
 
         return message;
     }
@@ -138,8 +151,18 @@ public class MessageServiceImpl implements MessageService {
         User sender = userRepository.findById(UUID.fromString(senderId))
                 .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
 
-        // ── DIRECT: chặn & chính sách nhắn tin — không được nuốt exception (trước đây catch Exception làm bỏ qua cả LazyInitializationException). ──
-        enforceDirectChatOutgoingRules(sender, request.getReceiverId());
+        // DIRECT: chặn 2 chiều vẫn throw; riêng policy người lạ thì lưu tin phía người
+        // gửi + đánh dấu privacyBlocked.
+        boolean strangerPrivacyBlocked = false;
+        try {
+            enforceDirectChatOutgoingRules(sender, request.getReceiverId());
+        } catch (IllegalStateException ex) {
+            if (AppConstants.STRANGER_MESSAGES_NOT_ALLOWED.equals(ex.getMessage())) {
+                strangerPrivacyBlocked = true;
+            } else {
+                throw ex;
+            }
+        }
 
         if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
             boolean exists = messageDynamoRepository
@@ -164,13 +187,19 @@ public class MessageServiceImpl implements MessageService {
         message.setRead(false);
         message.setReadBy(new ArrayList<>());
         message.setReactions(new ArrayList<>());
+        message.setPrivacyBlocked(strangerPrivacyBlocked);
 
-        log.info("[DEBUG] ProcessMessage attachments count: {}", 
-                 message.getAttachments() != null ? message.getAttachments().size() : "null");
+        log.info("[DEBUG] ProcessMessage attachments count: {}",
+                message.getAttachments() != null ? message.getAttachments().size() : "null");
 
         saveMessage(message);
-        String destination = "/topic/chat/" + message.getChatRoomId();
-        messagingTemplate.convertAndSend(destination, normalizeMessage(message));
+        if (strangerPrivacyBlocked) {
+            String senderDest = "/topic/chat/" + message.getChatRoomId() + "/" + senderId;
+            messagingTemplate.convertAndSend(senderDest, normalizeMessage(message));
+        } else {
+            String destination = "/topic/chat/" + message.getChatRoomId();
+            messagingTemplate.convertAndSend(destination, normalizeMessage(message));
+        }
 
         return message;
     }
@@ -211,12 +240,12 @@ public class MessageServiceImpl implements MessageService {
     public PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit) {
         log.info("Fetching messages from DynamoDB for room: {}, limit: {}", roomId, limit);
         PaginatedMessageResult result = messageDynamoRepository.getMessagesByRoomId(roomId.toString(), lastKey, limit);
-        
+
         // Normalize URLs for all messages
         if (result.getMessages() != null) {
             result.getMessages().forEach(this::normalizeMessage);
         }
-        
+
         log.info("Found {} messages for room {}", result.getMessages().size(), roomId);
         return result;
     }
@@ -325,6 +354,11 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void pinMessage(String chatRoomId, String messageId, boolean pin) {
+        pinMessage(chatRoomId, messageId, pin, null, null);
+    }
+
+    @Override
+    public void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType) {
         messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
             if (pin && !message.isPinned()) {
                 long pinnedCount = messageDynamoRepository.countPinnedMessages(chatRoomId);
@@ -332,23 +366,91 @@ public class MessageServiceImpl implements MessageService {
                     throw new IllegalStateException("Chỉ được pin tối đa 5 tin nhắn trong một cuộc trò chuyện.");
                 }
             }
+
+            // Permission check for groups
+            chatRoomRepository.findById(java.util.UUID.fromString(chatRoomId)).ifPresent(room -> {
+                if (room.getType() == ERoomType.GROUP && actorName != null && !actorName.isBlank()
+                        && !actorName.equals("Ai đó")) {
+                    iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository
+                            .findByGroupId(room.getId()).orElse(null);
+                    if (settings != null && !settings.isAllowMemberPin()) {
+                        // find the sender room member
+                        userRepository.findByUsername(actorName).or(() -> userRepository.findByUsername(actorName))
+                                .ifPresent(u -> {
+                                    roomMemberRepository.findByRoomAndUser(room, u).ifPresent(member -> {
+                                        boolean isOwner = room.getCreatedBy().getId().equals(u.getId());
+                                        boolean isAdmin = member
+                                                .getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
+                                        if (!isOwner && !isAdmin) {
+                                            throw new IllegalStateException(
+                                                    "Only admins can pin messages in this group.");
+                                        }
+                                    });
+                                });
+                    }
+                }
+            });
+
             message.setPinned(pin);
             messageDynamoRepository.save(message);
 
-            // Broadcast pin event
-            String destination = "/topic/chat/" + chatRoomId + "/pin";
-            messagingTemplate.convertAndSend(destination, Map.of(
+            // Broadcast pin event (trạng thái ghim)
+            String pinDestination = "/topic/chat/" + chatRoomId + "/pin";
+            messagingTemplate.convertAndSend(pinDestination, Map.of(
                     "messageId", messageId,
                     "isPinned", pin));
 
-            log.info("Message {} {} in room {}", messageId, pin ? "pinned" : "unpinned", chatRoomId);
+            // Broadcast system message vào channel chat chính để cả 2 phía thấy thông báo
+            String actor = (actorName != null && !actorName.isBlank()) ? actorName : "Ai đó";
+            String msgType = (messageType != null && !messageType.isBlank()) ? messageType.toUpperCase() : "TEXT";
+            String typeLabel;
+            switch (msgType) {
+                case "IMAGE":
+                    typeLabel = "hình ảnh";
+                    break;
+                case "VIDEO":
+                    typeLabel = "video";
+                    break;
+                case "FILE":
+                    typeLabel = "file";
+                    break;
+                case "LINK":
+                    typeLabel = "link";
+                    break;
+                default:
+                    typeLabel = "văn bản";
+                    break;
+            }
+            String content = pin
+                    ? actor + " đã ghim 1 tin nhắn " + typeLabel + "."
+                    : actor + " đã bỏ ghim 1 tin nhắn " + typeLabel + ".";
+
+            MessageDynamo sysMsg = new MessageDynamo();
+            sysMsg.setMessageId(java.util.UUID.randomUUID().toString());
+            sysMsg.setChatRoomId(chatRoomId);
+            sysMsg.setSenderId("system");
+            sysMsg.setSenderName("Hệ thống");
+            sysMsg.setContent(content);
+            sysMsg.setType("PIN_NOTIFICATION");
+            sysMsg.setCreatedAt(java.time.Instant.now().toString());
+            sysMsg.setReplyToMessageId(pin ? messageId : null); // link đến tin nhắn được ghim khi pin
+            sysMsg.setRead(false);
+            sysMsg.setReadBy(new ArrayList<>());
+            sysMsg.setReactions(new ArrayList<>());
+            messageDynamoRepository.save(sysMsg);
+
+            String chatDestination = "/topic/chat/" + chatRoomId;
+            messagingTemplate.convertAndSend(chatDestination, sysMsg);
+
+            log.info("Message {} {} in room {} by {}", messageId, pin ? "pinned" : "unpinned", chatRoomId, actor);
         });
     }
 
     @Override
     public PaginatedMessageResult getPinnedMessages(UUID roomId, String lastKey, int limit) {
         log.info("Fetching pinned messages from DynamoDB for room: {}, limit: {}", roomId, limit);
-        PaginatedMessageResult result = messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey, limit);
+        PaginatedMessageResult result = messageDynamoRepository.getPinnedMessagesByRoomId(roomId.toString(), lastKey,
+                limit);
         if (result.getMessages() != null) {
             result.getMessages().forEach(this::normalizeMessage);
         }
@@ -384,7 +486,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private MessageDynamo normalizeMessage(MessageDynamo message) {
-        if (message == null || message.getAttachments() == null) return message;
+        if (message == null || message.getAttachments() == null)
+            return message;
         message.getAttachments().forEach(attachment -> {
             if (attachment.getUrl() != null) {
                 attachment.setUrl(minioService.ensurePublicUrl(attachment.getUrl()));
@@ -397,8 +500,10 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey) {
-        SearchMessageResponse result = messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey);
+    public SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey,
+            String senderId, String fromDateInclusive, String toDateInclusive) {
+        SearchMessageResponse result = messageDynamoRepository.searchMessages(roomId.toString(), query, limit, lastKey,
+                senderId, fromDateInclusive, toDateInclusive);
         if (result.getMessages() != null) {
             result.getMessages().forEach(this::normalizeMessage);
         }
@@ -425,7 +530,7 @@ public class MessageServiceImpl implements MessageService {
             try {
                 String roomId = membership.getRoom().getId().toString();
                 SearchMessageResponse roomResult = messageDynamoRepository
-                        .searchMessages(roomId, query, perRoomLimit, null);
+                        .searchMessages(roomId, query, perRoomLimit, null, null, null, null);
                 allMatches.addAll(roomResult.getMessages());
             } catch (Exception e) {
                 log.warn("[searchMessagesGlobal] Error searching room: {}", e.getMessage());
@@ -451,7 +556,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     /**
-     * Phòng DIRECT: chặn 2 chiều + {@link #assertRecipientAcceptsDirectMessageFrom}.
+     * Phòng DIRECT: chặn 2 chiều +
+     * {@link #assertRecipientAcceptsDirectMessageFrom}.
      * Không bọc try/catch — mọi lỗi phải lan truyền để không gửi nhầm tin.
      */
     private void enforceDirectChatOutgoingRules(User sender, String roomIdStr) {
@@ -499,7 +605,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     /**
-     * recipient = người nhận tin (đối phương trong phòng DIRECT). Kiểm tra allowMessagesFrom.
+     * recipient = người nhận tin (đối phương trong phòng DIRECT). Kiểm tra
+     * allowMessagesFrom.
      */
     private void assertRecipientAcceptsDirectMessageFrom(User sender, User recipient) {
         EPrivacyAudience policy = recipient.getAllowMessagesFrom() != null

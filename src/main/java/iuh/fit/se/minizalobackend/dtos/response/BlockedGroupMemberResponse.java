@@ -1,23 +1,24 @@
 package iuh.fit.se.minizalobackend.dtos.response;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class GroupResponse {
+@Builder
+public class BlockedGroupMemberResponse {
     private String id;
-    private String groupName;
+    private String userId;
+    private String username;
+    private String displayName;
     private String avatarUrl;
-    private String ownerId;
-    private LocalDateTime createdAt;
-    private List<GroupMemberResponse> members;
-    private GroupSettingsResponse settings;
+    private LocalDateTime blockedAt;
+    private String blockedBy;
 }

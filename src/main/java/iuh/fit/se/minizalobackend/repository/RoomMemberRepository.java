@@ -28,6 +28,8 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, UUID> {
 
     long countByRoomAndRole(ChatRoom room, ERoomRole role);
 
+    long countByRoom(ChatRoom room);
+
     Optional<RoomMember> findByRoomAndUser_Id(ChatRoom room, UUID userId);
 
     List<RoomMember> findByRoomAndUser_IdIn(ChatRoom room, List<UUID> userIds);
@@ -37,4 +39,8 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, UUID> {
     List<RoomMember> findByUserAndRoom_Type(User user, ERoomType roomType);
 
     boolean existsByRoom_IdAndUser_Id(UUID roomId, UUID userId);
+
+    boolean existsByRoomAndUser(ChatRoom room, User user);
+
+    Optional<RoomMember> findByRoom_IdAndUser_IdAndRole(UUID roomId, UUID userId, ERoomRole role);
 }

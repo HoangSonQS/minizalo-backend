@@ -13,12 +13,15 @@ import iuh.fit.se.minizalobackend.services.FriendService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import lombok.RequiredArgsConstructor;
 import iuh.fit.se.minizalobackend.services.MessageService;
-import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
 import iuh.fit.se.minizalobackend.payload.request.FriendRequest;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +38,7 @@ public class FriendServiceImpl implements FriendService {
     private final UserService userService;
     private final ChatRoomService chatRoomService;
     private final MessageService messageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     private static String normalizeInviteSource(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -109,10 +113,26 @@ public class FriendServiceImpl implements FriendService {
         // Create direct chat room
         iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse room = chatRoomService
                 .createDirectChat(friendRequest.getUser(), friendRequest.getFriend());
-        ChatMessageRequest helloRequest = new ChatMessageRequest();
-        helloRequest.setReceiverId(room.getId().toString());
-        helloRequest.setContent("Hello");
-        messageService.processMessage(helloRequest, friendRequest.getFriend().getId().toString());
+
+        // Send SYSTEM message instead of "Hello"
+        MessageDynamo sysMsg = new MessageDynamo();
+        sysMsg.setChatRoomId(room.getId().toString());
+        sysMsg.setSenderId("SYSTEM");
+        sysMsg.setSenderName("SYSTEM");
+        sysMsg.setContent("Hai bạn đã trở thành bạn bè");
+        sysMsg.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+        sysMsg.setCreatedAt(Instant.now().toString());
+        MessageDynamo savedSysMsg = messageService.saveMessage(sysMsg);
+
+        messagingTemplate.convertAndSend("/topic/chat/" + room.getId().toString(),
+                java.util.Map.of(
+                        "messageId", savedSysMsg.getMessageId(),
+                        "chatRoomId", room.getId().toString(),
+                        "senderId", "SYSTEM",
+                        "senderUsername", "SYSTEM",
+                        "content", savedSysMsg.getContent(),
+                        "type", AppConstants.MESSAGE_TYPE_SYSTEM,
+                        "timestamp", savedSysMsg.getCreatedAt()));
 
         return new AcceptFriendRequestResponse(mapFriendToFriendResponse(acceptedRequest), room);
 

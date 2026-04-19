@@ -174,4 +174,88 @@ public class GroupChatController {
                 MessageResponse response = groupService.disbandGroup(groupId, currentUser);
                 return ResponseEntity.ok(response);
         }
+
+        @GetMapping("/{groupId}/settings")
+        public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse> getGroupSettings(
+                        @PathVariable UUID groupId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                return ResponseEntity.ok(groupService.getGroupSettings(groupId, currentUser));
+        }
+
+        @PutMapping("/settings")
+        public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse> updateGroupSettings(
+                        @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.UpdateGroupSettingsRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                return ResponseEntity.ok(groupService.updateGroupSettings(request, currentUser));
+        }
+
+        @PostMapping("/transfer-ownership")
+        public ResponseEntity<GroupResponse> transferOwnership(
+                        @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.TransferOwnershipRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                return ResponseEntity.ok(groupService.transferOwnership(request.getGroupId(), request.getNewOwnerId(), currentUser));
+        }
+
+        @PostMapping("/block-member")
+        public ResponseEntity<Void> blockMember(
+                        @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.BlockMemberRequest request,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                groupService.blockMember(request.getGroupId(), request.getTargetUserId(), currentUser);
+                return ResponseEntity.ok().build();
+        }
+
+        @DeleteMapping("/{groupId}/block-member/{targetUserId}")
+        public ResponseEntity<Void> unblockMember(
+                        @PathVariable UUID groupId,
+                        @PathVariable UUID targetUserId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                groupService.unblockMember(groupId, targetUserId, currentUser);
+                return ResponseEntity.ok().build();
+        }
+
+        @GetMapping("/{groupId}/blocked")
+        public ResponseEntity<List<iuh.fit.se.minizalobackend.dtos.response.BlockedGroupMemberResponse>> getBlockedMembers(
+                        @PathVariable UUID groupId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                return ResponseEntity.ok(groupService.getBlockedMembers(groupId, currentUser));
+        }
+
+        @PostMapping("/join/{joinToken}")
+        public ResponseEntity<GroupResponse> joinByLink(
+                        @PathVariable String joinToken,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                return ResponseEntity.ok(groupService.joinByLink(joinToken, currentUser));
+        }
+
+        @PostMapping("/{groupId}/refresh-link")
+        public ResponseEntity<iuh.fit.se.minizalobackend.payload.response.MessageResponse> refreshJoinLink(
+                        @PathVariable UUID groupId,
+                        @AuthenticationPrincipal UserDetailsImpl userDetails) {
+                User currentUser = userService.getUserById(userDetails.getId())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                String newLink = groupService.refreshJoinLink(groupId, currentUser);
+                return ResponseEntity.ok(new iuh.fit.se.minizalobackend.payload.response.MessageResponse(newLink));
+        }
 }

@@ -95,7 +95,7 @@ public class ChatIntegrationTest {
         mockResponse.setMessages(Collections.singletonList(message));
         mockResponse.setTotalResults(1);
 
-        when(messageDynamoRepository.searchMessages(anyString(), eq(query), anyInt(), any()))
+        when(messageDynamoRepository.searchMessages(anyString(), eq(query), anyInt(), any(), any(), any(), any()))
                 .thenReturn(mockResponse);
 
         mockMvc.perform(get("/api/chat/" + roomId + "/search")
