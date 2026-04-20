@@ -58,6 +58,43 @@ public class GroupServiceImpl implements GroupService {
     private final SimpMessagingTemplate messagingTemplate;
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
 
+    private String displayNameOf(User u) {
+        if (u == null) return "Ai đó";
+        if (u.getDisplayName() != null && !u.getDisplayName().trim().isEmpty()) return u.getDisplayName().trim();
+        if (u.getUsername() != null && !u.getUsername().trim().isEmpty()) return u.getUsername().trim();
+        return "Ai đó";
+    }
+
+    private void publishSystemChatMessage(ChatRoom room, User initiator, String sysMsg) {
+        try {
+            final String roomIdStr = room.getId().toString();
+            final String initiatorDisplayName = displayNameOf(initiator);
+
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(roomIdStr);
+            message.setSenderId(initiator.getId().toString());
+            message.setSenderName(initiatorDisplayName);
+            message.setContent(sysMsg);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo savedMessage = messageService.saveMessage(message);
+
+            GroupChatMessage groupChatMessage = GroupChatMessage.builder()
+                    .messageId(savedMessage.getMessageId())
+                    .groupId(roomIdStr)
+                    .senderId(initiator.getId().toString())
+                    .senderUsername(initiatorDisplayName)
+                    .content(sysMsg)
+                    .type(AppConstants.MESSAGE_TYPE_SYSTEM)
+                    .timestamp(savedMessage.getCreatedAt())
+                    .isRecalled(false)
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/chat/" + roomIdStr, groupChatMessage);
+        } catch (Exception e) {
+            log.warn("Failed to publish SYSTEM chat message: {}", e.getMessage());
+        }
+    }
+
     @Override
     @Transactional
     public GroupResponse createGroup(CreateGroupRequest request, User creator) {
@@ -732,10 +769,10 @@ public class GroupServiceImpl implements GroupService {
 
         // Publish MEMBER_ROLE_CHANGED event
         String roleLabel = newRole == ERoomRole.ADMIN ? "phó nhóm" : "thành viên";
-        publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ROLE_CHANGED,
-                initiator.getUsername() + " đã thay đổi quyền của " + targetMember.getUser().getUsername()
-                        + " thành " + roleLabel + ".",
-                targetMember.getUser());
+        String sysMsg = displayNameOf(initiator) + " đã thay đổi quyền của " + displayNameOf(targetMember.getUser())
+                + " thành " + roleLabel + ".";
+        publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ROLE_CHANGED, sysMsg, targetMember.getUser());
+        publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
 
         List<RoomMember> members = roomMemberRepository.findAllByRoom(groupChatRoom);
         return buildGroupResponse(groupChatRoom, members);
@@ -794,6 +831,22 @@ public class GroupServiceImpl implements GroupService {
         groupChatRoom.setUpdatedAt(LocalDateTime.now());
         groupRepository.save(groupChatRoom);
 
+        // Thông báo SYSTEM trong chat để web/mobile thấy ngay (giống Zalo)
+        List<String> changed = new ArrayList<>();
+        if (request.getAllowMemberSendMessage() != null) {
+            changed.add("quyền gửi tin nhắn " + (request.getAllowMemberSendMessage() ? "được bật" : "đã tắt"));
+        }
+        if (request.getAllowMemberCreatePoll() != null) {
+            changed.add("quyền tạo bình chọn " + (request.getAllowMemberCreatePoll() ? "được bật" : "đã tắt"));
+        }
+        if (request.getAllowMemberPin() != null) {
+            changed.add("quyền ghim tin nhắn " + (request.getAllowMemberPin() ? "được bật" : "đã tắt"));
+        }
+        if (!changed.isEmpty()) {
+            String sysMsg = initiator.getUsername() + " đã cập nhật: " + String.join(", ", changed) + ".";
+            publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
+        }
+
         return modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
     }
 
@@ -823,7 +876,9 @@ public class GroupServiceImpl implements GroupService {
         newOwnerMember.setRole(ERoomRole.ADMIN);
         roomMemberRepository.save(newOwnerMember);
 
-        publishGroupEvent(groupChatRoom, ERoomEventType.NAME_CHANGED, initiator.getUsername() + " đã nhường quyền trưởng nhóm cho " + newOwner.getUsername(), newOwner);
+        String sysMsg = displayNameOf(initiator) + " đã nhường quyền trưởng nhóm cho " + displayNameOf(newOwner) + ".";
+        publishGroupEvent(groupChatRoom, ERoomEventType.NAME_CHANGED, sysMsg, newOwner);
+        publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
 
         return buildGroupResponse(groupChatRoom, roomMemberRepository.findAllByRoom(groupChatRoom));
     }
@@ -862,8 +917,9 @@ public class GroupServiceImpl implements GroupService {
             // Remove them if they are in the group
             roomMemberRepository.findByRoomAndUser(groupChatRoom, targetUser).ifPresent(roomMemberRepository::delete);
             
-            String sysMsg = initiator.getUsername() + " đã chặn " + targetUser.getUsername() + " khỏi nhóm.";
+            String sysMsg = displayNameOf(initiator) + " đã chặn " + displayNameOf(targetUser) + " khỏi nhóm.";
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_REMOVED, sysMsg, targetUser);
+            publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
         }
     }
 
@@ -881,6 +937,13 @@ public class GroupServiceImpl implements GroupService {
         }
 
         blockedGroupMemberRepository.deleteByGroupIdAndBlockedUserId(groupId, targetUserId);
+        try {
+            User targetUser = userRepository.findById(targetUserId).orElse(null);
+            if (targetUser != null) {
+                String sysMsg = displayNameOf(initiator) + " đã bỏ chặn " + displayNameOf(targetUser) + ".";
+                publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
+            }
+        } catch (Exception ignored) { }
     }
 
     @Override
