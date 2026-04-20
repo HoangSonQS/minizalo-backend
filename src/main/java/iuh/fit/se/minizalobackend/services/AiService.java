@@ -1,6 +1,9 @@
 package iuh.fit.se.minizalobackend.services;
 
+import iuh.fit.se.minizalobackend.models.ChatSummary;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
+import iuh.fit.se.minizalobackend.repository.ChatSummaryRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -9,14 +12,20 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class AiService {
+
+    private final ChatSummaryRepository chatSummaryRepository;
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
     private String geminiApiKey1;
@@ -37,7 +46,7 @@ public class AiService {
     private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=";
 
     @SuppressWarnings("unchecked")
-    public String summarizeChat(List<MessageDynamo> messages) {
+    public String summarizeChat(String roomId, List<MessageDynamo> messages) {
         if (messages.isEmpty()) {
             return "Không có tin nhắn nào trong khoảng thời gian này.";
         }
@@ -138,8 +147,26 @@ public class AiService {
                             Map<String, Object> candidate = candidates.get(0);
                             Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
                             List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
-                            log.info("Tóm tắt thành công với API Key thứ {}", (i + 1));
-                            return (String) partsList.get(0).get("text");
+                            String summaryResult = (String) partsList.get(0).get("text");
+                            
+                            // Lưu kết quả tóm tắt vào lịch sử (Hết hạn sau 5 ngày)
+                            try {
+                                ChatSummary summary = new ChatSummary();
+                                summary.setRoomId(roomId);
+                                summary.setCreatedAt(Instant.now().toString());
+                                summary.setSummaryId(UUID.randomUUID().toString());
+                                summary.setContent(summaryResult);
+                                // TTL: Hiện tại + 5 ngày (đơn vị epoch seconds)
+                                long ttlSecs = Instant.now().plus(5, ChronoUnit.DAYS).getEpochSecond();
+                                summary.setTtl(ttlSecs);
+                                
+                                chatSummaryRepository.save(summary);
+                                log.info("Đã lưu lịch sử tóm tắt cho phòng {}, TTL: {}", roomId, ttlSecs);
+                            } catch (Exception saveEx) {
+                                log.error("Lỗi khi lưu lịch sử tóm tắt: {}", saveEx.getMessage());
+                            }
+
+                            return summaryResult;
                         }
                     }
                 } catch (Exception e) {
@@ -178,5 +205,9 @@ public class AiService {
             }
         }
         return "Đã xảy ra lỗi khi yêu cầu AI sau khi thử tất cả các Key dự phòng.";
+    }
+
+    public List<ChatSummary> getSummaryHistory(String roomId) {
+        return chatSummaryRepository.getSummariesByRoomId(roomId);
     }
 }
