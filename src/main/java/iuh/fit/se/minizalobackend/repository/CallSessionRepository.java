@@ -32,4 +32,6 @@ public interface CallSessionRepository extends JpaRepository<CallSession, UUID> 
         @Param("receiverId") UUID receiverId,
         @Param("since") LocalDateTime since
     );
+
+    // Group calls: use CallParticipantRepository for pending lookups.
 }

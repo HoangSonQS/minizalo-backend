@@ -33,6 +33,15 @@ public interface MessageService {
 
     MessageDynamo processMessage(ChatMessageRequest request, String senderId);
 
+    /**
+     * Update nội dung (và optionally type) của 1 tin nhắn đã tồn tại, rồi broadcast event
+     * MESSAGE_UPDATED qua WS `/topic/chat/{roomId}` để client patch in-place (không tạo bubble mới).
+     * Dùng chính cho group call: tin STARTED → ENDED cập nhật duration + status tại chỗ.
+     *
+     * @return MessageDynamo đã cập nhật, hoặc null nếu không tìm thấy message.
+     */
+    MessageDynamo updateMessageContent(String chatRoomId, String messageId, String newContent, String newType);
+
     SearchMessageResponse searchMessages(UUID roomId, String query, int limit, String lastKey,
             String senderId, String fromDateInclusive, String toDateInclusive);
 
