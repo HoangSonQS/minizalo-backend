@@ -38,11 +38,11 @@ public class AiService {
         String transcript = messages.stream()
                 .map(m -> {
                     String prefix = m.getSenderName() + " (" + m.getCreatedAt() + "): ";
-                    
+
                     if (m.isRecalled()) {
                         return prefix + "[Đã thu hồi tin nhắn]";
                     }
-                    
+
                     if ("IMAGE".equalsIgnoreCase(m.getType())) {
                         return prefix + "[Gửi một hình ảnh]";
                     }
@@ -54,7 +54,8 @@ public class AiService {
                     }
                     if ("FILE".equalsIgnoreCase(m.getType())) {
                         String fileName = "tệp tin";
-                        if (m.getAttachments() != null && !m.getAttachments().isEmpty() && m.getAttachments().get(0).getFilename() != null) {
+                        if (m.getAttachments() != null && !m.getAttachments().isEmpty()
+                                && m.getAttachments().get(0).getFilename() != null) {
                             fileName = m.getAttachments().get(0).getFilename();
                         }
                         return prefix + "[Gửi đính kèm: " + fileName + "]";
@@ -65,7 +66,7 @@ public class AiService {
                     if ("CALL".equalsIgnoreCase(m.getType())) {
                         return prefix + "[Cuộc gọi thoại/video]";
                     }
-                    
+
                     // Fallback to text
                     return prefix + m.getContent();
                 })
@@ -75,9 +76,20 @@ public class AiService {
             return "Không có văn bản nào để tóm tắt trong khoảng thời gian này.";
         }
 
-        String prompt = "Dưới đây là một cuộc hội thoại trong ứng dụng nhắn tin. " +
-                "Hãy đọc và tóm tắt lại các ý chính đã được trao đổi một cách ngắn gọn, súc tích " +
-                "và có cấu trúc rõ ràng (bằng tiếng Việt, sử dụng các gạch đầu dòng).\n\n" +
+        String prompt = "Bạn là một trợ lý ảo thông minh của ứng dụng MiniZalo. " +
+                "Nhiệm vụ của bạn là tóm tắt đoạn hội thoại dưới đây một cách chuyên nghiệp, khách quan và dễ hiểu.\n\n"
+                +
+                "Yêu cầu về định dạng:\n" +
+                "1. 📌 **Chủ đề chính**: Tóm tắt ngắn gọn cuộc thảo luận xoay quanh vấn đề gì.\n" +
+                "2. 💬 **Nội dung chi tiết**: Sử dụng các gạch đầu dòng để liệt kê các ý chính, thông tin quan trọng hoặc các mốc thời gian đáng chú ý.\n"
+                +
+                "3. ✅ **Kết luận/Hành động tiếp theo**: Nếu có các quyết định đã được đưa ra hoặc các công việc cần làm tiếp theo, hãy liệt kê rõ.\n\n"
+                +
+                "Lưu ý:\n" +
+                "- Sử dụng tiếng Việt tự nhiên, lịch sự.\n" +
+                "- Nếu có các tệp đính kèm (hình ảnh, video, file), hãy nhắc đến chúng nếu chúng quan trọng đối với ngữ cảnh.\n"
+                +
+                "- Giữ độ dài vừa phải, không quá lan man.\n\n" +
                 "Đoạn hội thoại:\n" + transcript;
 
         // Tạo JSON body theo chuẩn Google Gemini 1.5 Flash
@@ -92,24 +104,52 @@ public class AiService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-        try {
-            String url = GEMINI_API_URL + geminiApiKey;
-            Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+        int maxRetries = 3;
+        int retryCount = 0;
+        Exception lastException = null;
 
-            // Phân tích kết quả JSON trả về
-            if (response != null && response.containsKey("candidates")) {
-                List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
-                if (!candidates.isEmpty()) {
-                    Map<String, Object> candidate = candidates.get(0);
-                    Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
-                    List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
-                    return (String) partsList.get(0).get("text");
+        while (retryCount < maxRetries) {
+            try {
+                String url = GEMINI_API_URL + geminiApiKey;
+                Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+
+                // Phân tích kết quả JSON trả về
+                if (response != null && response.containsKey("candidates")) {
+                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+                    if (!candidates.isEmpty()) {
+                        Map<String, Object> candidate = candidates.get(0);
+                        Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
+                        List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
+                        return (String) partsList.get(0).get("text");
+                    }
                 }
+                return "Không có nội dung tóm tắt từ AI.";
+            } catch (Exception e) {
+                lastException = e;
+                retryCount++;
+                log.warn("Lần thử {} thất bại: {}. Đang thử lại...", retryCount, e.getMessage());
+
+                // Chỉ retry nếu là lỗi 503 (Service Unavailable) hoặc 429 (Too Many Requests)
+                if (e.getMessage() != null && (e.getMessage().contains("503") || e.getMessage().contains("429"))) {
+                    try {
+                        // Delay 2s trước khi thử lại
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    continue;
+                }
+                // Nếu không phải lỗi 503/429 thì không retry nữa
+                break;
             }
-            return "Không có nội dung tóm tắt từ AI.";
-        } catch (Exception e) {
-            log.error("Lỗi khi kết nối với Gemini API: {}", e.getMessage());
-            return "Đã xảy ra lỗi khi yêu cầu AI: " + e.getMessage();
         }
+
+        log.error("Thất bại sau {} lần thử. Lỗi cuối cùng: {}", retryCount,
+                lastException != null ? lastException.getMessage() : "Unknown");
+        if (lastException != null && lastException.getMessage().contains("503")) {
+            return "Hệ thống AI hiện đang quá tải (Google Gemini 503). Vui lòng thử lại sau giây lát.";
+        }
+        return "Đã xảy ra lỗi khi yêu cầu AI: " + (lastException != null ? lastException.getMessage() : "Timeout");
     }
 }
