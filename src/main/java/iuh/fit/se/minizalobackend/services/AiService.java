@@ -19,17 +19,25 @@ import java.util.stream.Collectors;
 public class AiService {
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
-    private String geminiApiKey;
+    private String geminiApiKey1;
+
+    @Value("${gemini.api.key2:${GEMINI_API_KEY_2:}}")
+    private String geminiApiKey2;
+
+    @Value("${gemini.api.key3:${GEMINI_API_KEY_3:}}")
+    private String geminiApiKey3;
+
+    @Value("${gemini.api.key4:${GEMINI_API_KEY_4:}}")
+    private String geminiApiKey4;
+
+    @Value("${gemini.api.key5:${GEMINI_API_KEY_5:}}")
+    private String geminiApiKey5;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=";
 
+    @SuppressWarnings("unchecked")
     public String summarizeChat(List<MessageDynamo> messages) {
-        if (geminiApiKey == null || geminiApiKey.isBlank()) {
-            log.error("GEMINI_API_KEY is not configured.");
-            return "Hệ thống AI chưa được cấu hình. Vui lòng liên hệ quản trị viên.";
-        }
-
         if (messages.isEmpty()) {
             return "Không có tin nhắn nào trong khoảng thời gian này.";
         }
@@ -100,56 +108,75 @@ public class AiService {
         contents.put("parts", List.of(parts));
         requestBody.put("contents", List.of(contents));
 
+        List<String> apiKeys = java.util.Arrays.asList(
+                geminiApiKey1, geminiApiKey2, geminiApiKey3, geminiApiKey4, geminiApiKey5).stream()
+                .filter(k -> k != null && !k.isBlank()).collect(Collectors.toList());
+
+        if (apiKeys.isEmpty()) {
+            log.error("No GEMINI_API_KEYs are configured.");
+            return "Hệ thống AI chưa được cấu hình. Vui lòng liên hệ quản trị viên.";
+        }
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-        int maxRetries = 3;
-        int retryCount = 0;
         Exception lastException = null;
 
-        while (retryCount < maxRetries) {
-            try {
-                String url = GEMINI_API_URL + geminiApiKey;
-                Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+        for (int i = 0; i < apiKeys.size(); i++) {
+            String currentKey = apiKeys.get(i);
+            log.info("Đang thử với API Key thứ {}/{}", (i + 1), apiKeys.size());
 
-                // Phân tích kết quả JSON trả về
-                if (response != null && response.containsKey("candidates")) {
-                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
-                    if (!candidates.isEmpty()) {
-                        Map<String, Object> candidate = candidates.get(0);
-                        Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
-                        List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
-                        return (String) partsList.get(0).get("text");
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    String url = GEMINI_API_URL + currentKey;
+                    Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+
+                    if (response != null && response.containsKey("candidates")) {
+                        List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+                        if (!candidates.isEmpty()) {
+                            Map<String, Object> candidate = candidates.get(0);
+                            Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
+                            List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
+                            log.info("Tóm tắt thành công với API Key thứ {}", (i + 1));
+                            return (String) partsList.get(0).get("text");
+                        }
                     }
-                }
-                return "Không có nội dung tóm tắt từ AI.";
-            } catch (Exception e) {
-                lastException = e;
-                retryCount++;
-                log.warn("Lần thử {} thất bại: {}. Đang thử lại...", retryCount, e.getMessage());
+                } catch (Exception e) {
+                    lastException = e;
+                    log.warn("API Key {} - Lần thử {} thất bại: {}", (i + 1), attempt, e.getMessage());
 
-                // Chỉ retry nếu là lỗi 503 (Service Unavailable) hoặc 429 (Too Many Requests)
-                if (e.getMessage() != null && (e.getMessage().contains("503") || e.getMessage().contains("429"))) {
-                    try {
-                        // Delay 2s trước khi thử lại
-                        Thread.sleep(2000);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
+                    // Nếu là lỗi 429 (Hết hạn mức) thì chuyển key ngay lập tức không cần thử lần 2
+                    // của key đó
+                    if (e.getMessage() != null && e.getMessage().contains("429")) {
+                        log.warn("API Key {} đã hết hạn mức (429). Chuyển sang Key tiếp theo...", (i + 1));
                         break;
                     }
-                    continue;
+
+                    // Nếu là lỗi khác (như 503), đợi một chút rồi thử lại lần 2 của cùng key
+                    if (attempt < 2) {
+                        try {
+                            Thread.sleep(1500);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
                 }
-                // Nếu không phải lỗi 503/429 thì không retry nữa
-                break;
             }
         }
 
-        log.error("Thất bại sau {} lần thử. Lỗi cuối cùng: {}", retryCount,
+        log.error("Tất cả {} API Keys đều thất bại. Lỗi cuối cùng: {}", apiKeys.size(),
                 lastException != null ? lastException.getMessage() : "Unknown");
-        if (lastException != null && lastException.getMessage().contains("503")) {
-            return "Hệ thống AI hiện đang quá tải (Google Gemini 503). Vui lòng thử lại sau giây lát.";
+
+        if (lastException != null) {
+            String msg = lastException.getMessage();
+            if (msg.contains("429") || msg.contains("RESOURCE_EXHAUSTED")) {
+                return "Tất cả các API Key hiện tại đều đã hết hạn mức sử dụng (429). Vui lòng thử lại sau hoặc nâng cấp gói dịch vụ.";
+            }
+            if (msg.contains("503") || msg.contains("UNAVAILABLE")) {
+                return "Hệ thống AI hiện đang quá tải hoặc gặp sự cố kỹ thuật. Vui lòng thử lại sau giây lát.";
+            }
         }
-        return "Đã xảy ra lỗi khi yêu cầu AI: " + (lastException != null ? lastException.getMessage() : "Timeout");
+        return "Đã xảy ra lỗi khi yêu cầu AI sau khi thử tất cả các Key dự phòng.";
     }
 }
