@@ -19,17 +19,25 @@ import java.util.stream.Collectors;
 public class AiService {
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
-    private String geminiApiKey;
+    private String geminiApiKey1;
+
+    @Value("${gemini.api.key2:${GEMINI_API_KEY_2:}}")
+    private String geminiApiKey2;
+
+    @Value("${gemini.api.key3:${GEMINI_API_KEY_3:}}")
+    private String geminiApiKey3;
+
+    @Value("${gemini.api.key4:${GEMINI_API_KEY_4:}}")
+    private String geminiApiKey4;
+
+    @Value("${gemini.api.key5:${GEMINI_API_KEY_5:}}")
+    private String geminiApiKey5;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=";
 
+    @SuppressWarnings("unchecked")
     public String summarizeChat(List<MessageDynamo> messages) {
-        if (geminiApiKey == null || geminiApiKey.isBlank()) {
-            log.error("GEMINI_API_KEY is not configured.");
-            return "Hệ thống AI chưa được cấu hình. Vui lòng liên hệ quản trị viên.";
-        }
-
         if (messages.isEmpty()) {
             return "Không có tin nhắn nào trong khoảng thời gian này.";
         }
@@ -38,11 +46,11 @@ public class AiService {
         String transcript = messages.stream()
                 .map(m -> {
                     String prefix = m.getSenderName() + " (" + m.getCreatedAt() + "): ";
-                    
+
                     if (m.isRecalled()) {
                         return prefix + "[Đã thu hồi tin nhắn]";
                     }
-                    
+
                     if ("IMAGE".equalsIgnoreCase(m.getType())) {
                         return prefix + "[Gửi một hình ảnh]";
                     }
@@ -54,7 +62,8 @@ public class AiService {
                     }
                     if ("FILE".equalsIgnoreCase(m.getType())) {
                         String fileName = "tệp tin";
-                        if (m.getAttachments() != null && !m.getAttachments().isEmpty() && m.getAttachments().get(0).getFilename() != null) {
+                        if (m.getAttachments() != null && !m.getAttachments().isEmpty()
+                                && m.getAttachments().get(0).getFilename() != null) {
                             fileName = m.getAttachments().get(0).getFilename();
                         }
                         return prefix + "[Gửi đính kèm: " + fileName + "]";
@@ -65,7 +74,7 @@ public class AiService {
                     if ("CALL".equalsIgnoreCase(m.getType())) {
                         return prefix + "[Cuộc gọi thoại/video]";
                     }
-                    
+
                     // Fallback to text
                     return prefix + m.getContent();
                 })
@@ -75,9 +84,20 @@ public class AiService {
             return "Không có văn bản nào để tóm tắt trong khoảng thời gian này.";
         }
 
-        String prompt = "Dưới đây là một cuộc hội thoại trong ứng dụng nhắn tin. " +
-                "Hãy đọc và tóm tắt lại các ý chính đã được trao đổi một cách ngắn gọn, súc tích " +
-                "và có cấu trúc rõ ràng (bằng tiếng Việt, sử dụng các gạch đầu dòng).\n\n" +
+        String prompt = "Bạn là một trợ lý ảo thông minh của ứng dụng MiniZalo. " +
+                "Nhiệm vụ của bạn là tóm tắt đoạn hội thoại dưới đây một cách chuyên nghiệp, khách quan và dễ hiểu.\n\n"
+                +
+                "Yêu cầu về định dạng:\n" +
+                "1. 📌 **Chủ đề chính**: Tóm tắt ngắn gọn cuộc thảo luận xoay quanh vấn đề gì.\n" +
+                "2. 💬 **Nội dung chi tiết**: Sử dụng các gạch đầu dòng để liệt kê các ý chính, thông tin quan trọng hoặc các mốc thời gian đáng chú ý.\n"
+                +
+                "3. ✅ **Kết luận/Hành động tiếp theo**: Nếu có các quyết định đã được đưa ra hoặc các công việc cần làm tiếp theo, hãy liệt kê rõ.\n\n"
+                +
+                "Lưu ý:\n" +
+                "- Sử dụng tiếng Việt tự nhiên, lịch sự.\n" +
+                "- Nếu có các tệp đính kèm (hình ảnh, video, file), hãy nhắc đến chúng nếu chúng quan trọng đối với ngữ cảnh.\n"
+                +
+                "- Giữ độ dài vừa phải, không quá lan man.\n\n" +
                 "Đoạn hội thoại:\n" + transcript;
 
         // Tạo JSON body theo chuẩn Google Gemini 1.5 Flash
@@ -88,28 +108,75 @@ public class AiService {
         contents.put("parts", List.of(parts));
         requestBody.put("contents", List.of(contents));
 
+        List<String> apiKeys = java.util.Arrays.asList(
+                geminiApiKey1, geminiApiKey2, geminiApiKey3, geminiApiKey4, geminiApiKey5).stream()
+                .filter(k -> k != null && !k.isBlank()).collect(Collectors.toList());
+
+        if (apiKeys.isEmpty()) {
+            log.error("No GEMINI_API_KEYs are configured.");
+            return "Hệ thống AI chưa được cấu hình. Vui lòng liên hệ quản trị viên.";
+        }
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-        try {
-            String url = GEMINI_API_URL + geminiApiKey;
-            Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+        Exception lastException = null;
 
-            // Phân tích kết quả JSON trả về
-            if (response != null && response.containsKey("candidates")) {
-                List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
-                if (!candidates.isEmpty()) {
-                    Map<String, Object> candidate = candidates.get(0);
-                    Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
-                    List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
-                    return (String) partsList.get(0).get("text");
+        for (int i = 0; i < apiKeys.size(); i++) {
+            String currentKey = apiKeys.get(i);
+            log.info("Đang thử với API Key thứ {}/{}", (i + 1), apiKeys.size());
+
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    String url = GEMINI_API_URL + currentKey;
+                    Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+
+                    if (response != null && response.containsKey("candidates")) {
+                        List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+                        if (!candidates.isEmpty()) {
+                            Map<String, Object> candidate = candidates.get(0);
+                            Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
+                            List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
+                            log.info("Tóm tắt thành công với API Key thứ {}", (i + 1));
+                            return (String) partsList.get(0).get("text");
+                        }
+                    }
+                } catch (Exception e) {
+                    lastException = e;
+                    log.warn("API Key {} - Lần thử {} thất bại: {}", (i + 1), attempt, e.getMessage());
+
+                    // Nếu là lỗi 429 (Hết hạn mức) thì chuyển key ngay lập tức không cần thử lần 2
+                    // của key đó
+                    if (e.getMessage() != null && e.getMessage().contains("429")) {
+                        log.warn("API Key {} đã hết hạn mức (429). Chuyển sang Key tiếp theo...", (i + 1));
+                        break;
+                    }
+
+                    // Nếu là lỗi khác (như 503), đợi một chút rồi thử lại lần 2 của cùng key
+                    if (attempt < 2) {
+                        try {
+                            Thread.sleep(1500);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
                 }
             }
-            return "Không có nội dung tóm tắt từ AI.";
-        } catch (Exception e) {
-            log.error("Lỗi khi kết nối với Gemini API: {}", e.getMessage());
-            return "Đã xảy ra lỗi khi yêu cầu AI: " + e.getMessage();
         }
+
+        log.error("Tất cả {} API Keys đều thất bại. Lỗi cuối cùng: {}", apiKeys.size(),
+                lastException != null ? lastException.getMessage() : "Unknown");
+
+        if (lastException != null) {
+            String msg = lastException.getMessage();
+            if (msg.contains("429") || msg.contains("RESOURCE_EXHAUSTED")) {
+                return "Tất cả các API Key hiện tại đều đã hết hạn mức sử dụng (429). Vui lòng thử lại sau hoặc nâng cấp gói dịch vụ.";
+            }
+            if (msg.contains("503") || msg.contains("UNAVAILABLE")) {
+                return "Hệ thống AI hiện đang quá tải hoặc gặp sự cố kỹ thuật. Vui lòng thử lại sau giây lát.";
+            }
+        }
+        return "Đã xảy ra lỗi khi yêu cầu AI sau khi thử tất cả các Key dự phòng.";
     }
 }
