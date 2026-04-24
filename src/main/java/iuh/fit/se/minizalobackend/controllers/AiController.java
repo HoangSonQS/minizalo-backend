@@ -36,8 +36,14 @@ public class AiController {
                 request.getEndTime()
         );
         
-        String summary = aiService.summarizeChat(messages);
+        String summary = aiService.summarizeChat(roomId.toString(), messages);
         
         return ResponseEntity.ok(Map.of("summary", summary));
+    }
+
+    @GetMapping("/{roomId}/ai/history")
+    public ResponseEntity<List<iuh.fit.se.minizalobackend.models.ChatSummary>> getSummaryHistory(
+            @PathVariable UUID roomId) {
+        return ResponseEntity.ok(aiService.getSummaryHistory(roomId.toString()));
     }
 }
