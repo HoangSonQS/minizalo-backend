@@ -298,6 +298,41 @@ public class MessageServiceImpl implements MessageService {
                         "messageId", messageId,
                         "userId", userId,
                         "readAt", Instant.now().toString()));
+
+                // Cập nhật lastReadAt vào RoomMember (PostgreSQL) để tính unreadCount và phục vụ getOldestUnreadMessage
+                try {
+                    java.util.UUID rId = java.util.UUID.fromString(chatRoomId);
+                    java.util.UUID uId = java.util.UUID.fromString(userId);
+                    final String msgCreatedAt = message.getCreatedAt();
+                    chatRoomRepository.findById(rId).ifPresent(room -> {
+                        userRepository.findById(uId).ifPresent(user -> {
+                            roomMemberRepository.findByRoomAndUser(room, user).ifPresent(member -> {
+                                // Chuyển đổi sang LocalDateTime (UTC) để lưu vào Postgres
+                                try {
+                                    java.time.OffsetDateTime msgODT = java.time.OffsetDateTime.parse(msgCreatedAt);
+                                    java.time.LocalDateTime msgTime = msgODT
+                                            .atZoneSameInstant(java.time.ZoneOffset.UTC)
+                                            .toLocalDateTime();
+                                    
+                                    // Chỉ cập nhật nếu tin nhắn này MỚI HƠN thời điểm đọc hiện tại
+                                    if (member.getLastReadAt() == null || msgTime.isAfter(member.getLastReadAt())) {
+                                        member.setLastReadAt(msgTime);
+                                        roomMemberRepository.save(member);
+                                        log.info("Updated RoomMember lastReadAt forward to {} for user {} in room {}", msgTime, userId, chatRoomId);
+                                    } else {
+                                        log.debug("Ignored stale read receipt (msgTime {} <= lastReadAt {}) for user {} in room {}", msgTime, member.getLastReadAt(), userId, chatRoomId);
+                                    }
+                                } catch (Exception parseEx) {
+                                    // Fallback to now if parse fails
+                                    member.setLastReadAt(java.time.LocalDateTime.now());
+                                    roomMemberRepository.save(member);
+                                }
+                            });
+                        });
+                    });
+                } catch (Exception e) {
+                    log.error("Failed to update RoomMember lastReadAt: {}", e.getMessage());
+                }
             }
         });
     }
@@ -627,4 +662,58 @@ public class MessageServiceImpl implements MessageService {
             throw new IllegalStateException(AppConstants.STRANGER_MESSAGES_NOT_ALLOWED);
         }
     }
-}
+
+    @Override
+    public iuh.fit.se.minizalobackend.dtos.response.UnreadContextResponse getUnreadContext(
+            java.util.UUID roomId, String userId, int countBefore, int countAfter) {
+        String chatRoomId = roomId.toString();
+
+        // B1: Tìm lastReadAt của user để tối ưu việc tìm tin chưa đọc
+        String lastReadAtIso = null;
+        try {
+            Optional<ChatRoom> roomOpt = chatRoomRepository.findById(roomId);
+            Optional<User> userOpt = userRepository.findById(java.util.UUID.fromString(userId));
+            if (roomOpt.isPresent() && userOpt.isPresent()) {
+                Optional<RoomMember> memberOpt = roomMemberRepository.findByRoomAndUser(roomOpt.get(), userOpt.get());
+                if (memberOpt.isPresent()) {
+                    RoomMember membership = memberOpt.get();
+                    if (membership.getLastReadAt() != null) {
+                        lastReadAtIso = membership.getLastReadAt().atZone(java.time.ZoneOffset.UTC).toInstant().toString();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not get lastReadAt for user {} in room {}: {}", userId, chatRoomId, e.getMessage());
+        }
+
+        // B1.5: Tìm tin nhắn chưa đọc cũ nhất (bắt đầu từ lastReadAtIso)
+        log.info("[getUnreadContext] Searching oldest unread for user {} in room {} since {}", userId, chatRoomId, lastReadAtIso);
+        java.util.Optional<MessageDynamo> targetOpt =
+                messageDynamoRepository.getOldestUnreadMessage(chatRoomId, userId, lastReadAtIso);
+
+        if (targetOpt.isEmpty()) {
+            log.info("[getUnreadContext] No unread messages found for user {} in room {}", userId, chatRoomId);
+            return null; // Không có tin chưa đọc
+        }
+
+        MessageDynamo target = targetOpt.get();
+        String targetCreatedAt = target.getCreatedAt();
+
+        // B2: Lấy context xung quanh target
+        iuh.fit.se.minizalobackend.repository.MessageDynamoRepository.UnreadContextResult ctx =
+                messageDynamoRepository.getMessagesAroundTarget(chatRoomId, targetCreatedAt, countBefore, countAfter);
+
+        // B3: Normalize URLs
+        normalizeMessage(target);
+        ctx.messagesAfter().forEach(this::normalizeMessage);
+        ctx.messagesBefore().forEach(this::normalizeMessage);
+
+        return new iuh.fit.se.minizalobackend.dtos.response.UnreadContextResponse(
+                target,
+                ctx.messagesAfter(),
+                ctx.messagesBefore(),
+                ctx.hasMoreBefore(),
+                ctx.hasMoreAfter()
+        );
+    }
+}

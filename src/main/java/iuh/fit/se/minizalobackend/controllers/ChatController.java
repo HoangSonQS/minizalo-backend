@@ -356,4 +356,27 @@ public class ChatController {
                 chatRoomService.saveNickname(roomId, nickname, actor);
         return ResponseEntity.ok(updated);
     }
+
+    /**
+     * GET /api/chat/{roomId}/unread-context
+     * Trả về tin nhắn chưa đọc cũ nhất + context xung quanh để FlatList scroll chính xác.
+     * @param countBefore số tin cũ hơn target cần trả về (default 5)
+     * @param countAfter  số tin mới hơn target cần trả về (default 15)
+     */
+    @GetMapping("/api/chat/{roomId}/unread-context")
+    public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.UnreadContextResponse> getUnreadContext(
+            @PathVariable UUID roomId,
+            @RequestParam(defaultValue = "5") int countBefore,
+            @RequestParam(defaultValue = "15") int countAfter,
+            Principal principal) {
+        String userId = getUserIdFromPrincipal(principal);
+        log.info("Fetching unread context for room: {}, user: {}", roomId, userId);
+        iuh.fit.se.minizalobackend.dtos.response.UnreadContextResponse ctx =
+                messageService.getUnreadContext(roomId, userId, countBefore, countAfter);
+        if (ctx == null) {
+            return ResponseEntity.noContent().build(); // 204 = không có tin chưa đọc
+        }
+        return ResponseEntity.ok(ctx);
+    }
 }
+
