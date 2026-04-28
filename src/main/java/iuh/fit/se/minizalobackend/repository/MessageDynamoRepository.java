@@ -20,7 +20,28 @@ public interface MessageDynamoRepository {
 
     long countPinnedMessages(String chatRoomId);
     long countMessagesBySender(String chatRoomId, String senderId);
+    long countUnreadMessages(String chatRoomId, String userId, String lastReadAtIso);
 
     iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse searchMessages(String chatRoomId, String query,
             int limit, String lastEvaluatedKey, String senderId, String fromDateInclusive, String toDateInclusive);
+
+    /**
+     * Lấy các tin nhắn xung quanh một tin cụ thể (dùng cho tính năng scroll đến tin chưa đọc).
+     * @param chatRoomId  ID phòng chat
+     * @param targetCreatedAt  createdAt (sort key) của tin nhắn đích
+     * @param countBefore  số tin cũ hơn target cần lấy
+     * @param countAfter   số tin mới hơn target cần lấy
+     * @return UnreadContextResult
+     */
+    UnreadContextResult getMessagesAroundTarget(String chatRoomId, String targetCreatedAt, int countBefore, int countAfter);
+
+    /** Hoàn trả tin nhắn chưa đọc cũ nhất trong phòng của user. */
+    java.util.Optional<iuh.fit.se.minizalobackend.models.MessageDynamo> getOldestUnreadMessage(String chatRoomId, String userId, String lastReadAtIso);
+
+    record UnreadContextResult(
+        java.util.List<iuh.fit.se.minizalobackend.models.MessageDynamo> messagesBefore,
+        java.util.List<iuh.fit.se.minizalobackend.models.MessageDynamo> messagesAfter,
+        boolean hasMoreBefore,
+        boolean hasMoreAfter
+    ) {}
 }

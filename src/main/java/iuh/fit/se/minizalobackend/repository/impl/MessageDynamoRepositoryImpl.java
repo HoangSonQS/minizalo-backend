@@ -4,6 +4,7 @@ import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
@@ -25,6 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Repository
 public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
 
@@ -192,6 +194,41 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
     }
 
     @Override
+    public long countUnreadMessages(String chatRoomId, String userId, String lastReadAtIso) {
+        QueryConditional queryConditional;
+        if (lastReadAtIso != null && !lastReadAtIso.isBlank()) {
+            queryConditional = QueryConditional
+                    .sortGreaterThan(Key.builder()
+                            .partitionValue(chatRoomId)
+                            .sortValue(lastReadAtIso)
+                            .build());
+        } else {
+            queryConditional = QueryConditional
+                    .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
+        }
+
+        QueryEnhancedRequest request = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .build();
+
+        PageIterable<MessageDynamo> pages = messageTable.query(request);
+        long count = 0L;
+        for (Page<MessageDynamo> page : pages) {
+            for (MessageDynamo msg : page.items()) {
+                // Bỏ qua tin của chính mình, tin hệ thống
+                if (userId.equals(msg.getSenderId())) continue;
+                if ("system".equals(msg.getSenderId())) continue;
+                if ("SYSTEM".equals(msg.getType()) || "PIN_NOTIFICATION".equals(msg.getType())) continue;
+
+                if (msg.getReadBy() == null || !msg.getReadBy().contains(userId)) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    @Override
     public SearchMessageResponse searchMessages(String chatRoomId, String query, int limit, String lastEvaluatedKey,
             String senderId, String fromDateInclusive, String toDateInclusive) {
         QueryConditional queryConditional = QueryConditional
@@ -252,6 +289,90 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
         } else {
             return new SearchMessageResponse(Collections.emptyList(), null, false, 0);
         }
+    }
+
+    @Override
+    public java.util.Optional<MessageDynamo> getOldestUnreadMessage(String chatRoomId, String userId, String lastReadAtIso) {
+        QueryConditional queryConditional;
+        if (lastReadAtIso != null && !lastReadAtIso.isBlank()) {
+            queryConditional = QueryConditional.sortGreaterThan(
+                    Key.builder().partitionValue(chatRoomId).sortValue(lastReadAtIso).build());
+        } else {
+            queryConditional = QueryConditional.keyEqualTo(
+                    Key.builder().partitionValue(chatRoomId).build());
+        }
+
+        QueryEnhancedRequest request = QueryEnhancedRequest.builder()
+                .queryConditional(queryConditional)
+                .scanIndexForward(true) // cũ nhất trước
+                .build();
+
+        PageIterable<MessageDynamo> pages = messageTable.query(request);
+        int totalInspected = 0;
+        for (Page<MessageDynamo> page : pages) {
+            for (MessageDynamo msg : page.items()) {
+                totalInspected++;
+                // Bỏ qua tin hệ thống, tin của chính user
+                if ("system".equals(msg.getSenderId())) continue;
+                if ("SYSTEM".equals(msg.getType()) || "PIN_NOTIFICATION".equals(msg.getType())) continue;
+                if (userId.equals(msg.getSenderId())) continue;
+                
+                List<String> readBy = msg.getReadBy();
+                if (readBy == null || !readBy.contains(userId)) {
+                    log.info("[getOldestUnreadMessage] Found target: {} at inspected count: {}", msg.getMessageId(), totalInspected);
+                    return java.util.Optional.of(msg);
+                }
+            }
+        }
+        log.info("[getOldestUnreadMessage] No unread message found after inspecting {} messages.", totalInspected);
+        return java.util.Optional.empty();
+    }
+
+    @Override
+    public UnreadContextResult getMessagesAroundTarget(String chatRoomId, String targetCreatedAt,
+            int countBefore, int countAfter) {
+
+        // --- Phần 1: Lấy các tin nhắn MOỜI HƠN target (messagesAfter) ---
+        // Trong DynamoDB inverted FlatList, "after" = createdAt > targetCreatedAt, scan xuôi
+        QueryConditional afterQuery = QueryConditional.sortGreaterThan(
+                Key.builder().partitionValue(chatRoomId).sortValue(targetCreatedAt).build());
+
+        QueryEnhancedRequest afterRequest = QueryEnhancedRequest.builder()
+                .queryConditional(afterQuery)
+                .scanIndexForward(true) // tăng dần, lấy countAfter tin gần target nhất
+                .limit(countAfter + 1) // +1 để biết hasMoreAfter
+                .build();
+
+        List<MessageDynamo> rawAfter = new ArrayList<>();
+        for (Page<MessageDynamo> p : messageTable.query(afterRequest)) {
+            rawAfter.addAll(p.items());
+            if (rawAfter.size() >= countAfter + 1) break;
+        }
+        boolean hasMoreAfter = rawAfter.size() > countAfter;
+        List<MessageDynamo> messagesAfter = rawAfter.subList(0, Math.min(countAfter, rawAfter.size()));
+        // Đảo ngược để mới nhất ở đầu (phù hợp inverted FlatList)
+        Collections.reverse(messagesAfter);
+
+        // --- Phần 2: Lấy các tin nhắn CŨ HƠN target (messagesBefore) ---
+        QueryConditional beforeQuery = QueryConditional.sortLessThan(
+                Key.builder().partitionValue(chatRoomId).sortValue(targetCreatedAt).build());
+
+        QueryEnhancedRequest beforeRequest = QueryEnhancedRequest.builder()
+                .queryConditional(beforeQuery)
+                .scanIndexForward(false) // giảm dần, lấy countBefore tin gần target nhất
+                .limit(countBefore + 1) // +1 để biết hasMoreBefore
+                .build();
+
+        List<MessageDynamo> rawBefore = new ArrayList<>();
+        for (Page<MessageDynamo> p : messageTable.query(beforeRequest)) {
+            rawBefore.addAll(p.items());
+            if (rawBefore.size() >= countBefore + 1) break;
+        }
+        boolean hasMoreBefore = rawBefore.size() > countBefore;
+        // rawBefore đang xếp giảm dần (mới rồi cũ), được giữ nguyîn (phù hợp inverted FlatList: từ mới → cũ)
+        List<MessageDynamo> messagesBefore = rawBefore.subList(0, Math.min(countBefore, rawBefore.size()));
+
+        return new UnreadContextResult(messagesBefore, messagesAfter, hasMoreBefore, hasMoreAfter);
     }
 
     private String serializeExclusiveStartKey(Map<String, AttributeValue> key) {
