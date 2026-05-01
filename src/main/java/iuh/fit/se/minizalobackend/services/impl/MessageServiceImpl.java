@@ -213,7 +213,19 @@ public class MessageServiceImpl implements MessageService {
                     UUID recipientId = member.getUser().getId();
                     // Don't notify the sender
                     if (!recipientId.equals(senderId)) {
-                        // Luôn gửi push khi có token: WS vẫn coi user "online" khi app chạy nền → trước đây không có FCM.
+                        // 1. Gửi tín hiệu WebSocket để cập nhật Badge/Danh sách chat tức thì
+                        try {
+                            String userDest = "/queue/rooms";
+                            messagingTemplate.convertAndSendToUser(
+                                recipientId.toString(), 
+                                userDest, 
+                                Map.of("action", "UNREAD_UPDATE", "roomId", message.getChatRoomId())
+                            );
+                        } catch (Exception e) {
+                            log.warn("Failed to send WebSocket unread update to user {}: {}", recipientId, e.getMessage());
+                        }
+
+                        // 2. Luôn gửi push khi có token
                         String fcmToken = member.getUser().getFcmToken();
                         if (fcmToken != null && !fcmToken.isEmpty()) {
                             log.debug("Sending push notification to user: {}", recipientId);
@@ -273,6 +285,21 @@ public class MessageServiceImpl implements MessageService {
                         "messageId", messageId,
                         "recalledAt", message.getRecalledAt()));
 
+                // Notify all members to refresh their room list (for last message preview update)
+                try {
+                    chatRoomRepository.findById(UUID.fromString(chatRoomId)).ifPresent(room -> {
+                        roomMemberRepository.findAllByRoom(room).forEach(m -> {
+                            messagingTemplate.convertAndSendToUser(
+                                m.getUser().getId().toString(),
+                                "/queue/rooms",
+                                Map.of("action", "UNREAD_UPDATE", "roomId", chatRoomId)
+                            );
+                        });
+                    });
+                } catch (Exception e) {
+                    log.warn("Failed to broadcast recall update to room members: {}", e.getMessage());
+                }
+
                 log.info("Message {} recalled in room {}", messageId, chatRoomId);
             } else {
                 log.warn("Recall failed: Message {} is older than 1 day", messageId);
@@ -319,6 +346,13 @@ public class MessageServiceImpl implements MessageService {
                                         member.setLastReadAt(msgTime);
                                         roomMemberRepository.save(member);
                                         log.info("Updated RoomMember lastReadAt forward to {} for user {} in room {}", msgTime, userId, chatRoomId);
+                                        
+                                        // Phát tín hiệu đồng bộ Badge tới các thiết bị khác của CHÍNH NGƯỜI ĐỌC
+                                        messagingTemplate.convertAndSendToUser(
+                                            userId, 
+                                            "/queue/rooms", 
+                                            Map.of("action", "UNREAD_UPDATE", "roomId", chatRoomId)
+                                        );
                                     } else {
                                         log.debug("Ignored stale read receipt (msgTime {} <= lastReadAt {}) for user {} in room {}", msgTime, member.getLastReadAt(), userId, chatRoomId);
                                     }
