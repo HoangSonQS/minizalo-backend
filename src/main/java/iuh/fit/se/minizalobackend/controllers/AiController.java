@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.dtos.request.AiSummarizeRequest;
+import iuh.fit.se.minizalobackend.dtos.request.AiPersonaRequest;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
 import iuh.fit.se.minizalobackend.services.AiService;
@@ -36,7 +37,7 @@ public class AiController {
                 request.getEndTime()
         );
         
-        String summary = aiService.summarizeChat(roomId.toString(), messages);
+        String summary = aiService.summarizeChat(roomId.toString(), messages, request.isUnreadOnly());
         
         return ResponseEntity.ok(Map.of("summary", summary));
     }
@@ -45,5 +46,16 @@ public class AiController {
     public ResponseEntity<List<iuh.fit.se.minizalobackend.models.ChatSummary>> getSummaryHistory(
             @PathVariable UUID roomId) {
         return ResponseEntity.ok(aiService.getSummaryHistory(roomId.toString()));
+    }
+
+    @PostMapping("/persona-chat")
+    public ResponseEntity<Map<String, String>> askPersona(
+            @Valid @RequestBody AiPersonaRequest request) {
+        
+        log.info("Requesting AI Persona chat for persona: {}", request.getPersona());
+        
+        String answer = aiService.askPersona(request.getPersona(), request.getQuestion());
+        
+        return ResponseEntity.ok(Map.of("answer", answer));
     }
 }

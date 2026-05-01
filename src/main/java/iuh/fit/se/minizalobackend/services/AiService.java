@@ -46,7 +46,7 @@ public class AiService {
     private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=";
 
     @SuppressWarnings("unchecked")
-    public String summarizeChat(String roomId, List<MessageDynamo> messages) {
+    public String summarizeChat(String roomId, List<MessageDynamo> messages, boolean isUnreadOnly) {
         if (messages.isEmpty()) {
             return "Không có tin nhắn nào trong khoảng thời gian này.";
         }
@@ -93,21 +93,33 @@ public class AiService {
             return "Không có văn bản nào để tóm tắt trong khoảng thời gian này.";
         }
 
-        String prompt = "Bạn là một trợ lý ảo thông minh của ứng dụng MiniZalo. " +
-                "Nhiệm vụ của bạn là tóm tắt đoạn hội thoại dưới đây một cách chuyên nghiệp, khách quan và dễ hiểu.\n\n"
-                +
-                "Yêu cầu về định dạng:\n" +
-                "1. 📌 **Chủ đề chính**: Tóm tắt ngắn gọn cuộc thảo luận xoay quanh vấn đề gì.\n" +
-                "2. 💬 **Nội dung chi tiết**: Sử dụng các gạch đầu dòng để liệt kê các ý chính, thông tin quan trọng hoặc các mốc thời gian đáng chú ý.\n"
-                +
-                "3. ✅ **Kết luận/Hành động tiếp theo**: Nếu có các quyết định đã được đưa ra hoặc các công việc cần làm tiếp theo, hãy liệt kê rõ.\n\n"
-                +
-                "Lưu ý:\n" +
-                "- Sử dụng tiếng Việt tự nhiên, lịch sự.\n" +
-                "- Nếu có các tệp đính kèm (hình ảnh, video, file), hãy nhắc đến chúng nếu chúng quan trọng đối với ngữ cảnh.\n"
-                +
-                "- Giữ độ dài vừa phải, không quá lan man.\n\n" +
-                "Đoạn hội thoại:\n" + transcript;
+        String prompt;
+        if (isUnreadOnly) {
+            prompt = "Bạn là trợ lý ảo MiniZalo. Hãy thực hiện 'Tóm tắt nhanh' (Quick Catch-up) đoạn hội thoại bên dưới.\n" +
+                    "Đoạn hội thoại này CHỈ bao gồm các tin nhắn MỚI mà người dùng chưa đọc.\n\n" +
+                    "Yêu cầu:\n" +
+                    "1. Tập trung tuyệt đối vào diễn biến MỚI NHẤT.\n" +
+                    "2. KHÔNG nhắc lại các nội dung cũ hoặc lịch sử trước đó.\n" +
+                    "3. Dùng ngôn ngữ cực kỳ cô đọng, súc tích (Bullet points).\n" +
+                    "4. Nếu có yêu cầu hối thúc hoặc mốc thời gian quan trọng, hãy nhấn mạnh.\n\n" +
+                    "Đoạn hội thoại mới:\n" + transcript;
+        } else {
+            prompt = "Bạn là một trợ lý ảo thông minh của ứng dụng MiniZalo. " +
+                    "Nhiệm vụ của bạn là tóm tắt đoạn hội thoại dưới đây một cách chuyên nghiệp, khách quan và dễ hiểu.\n\n"
+                    +
+                    "Yêu cầu về định dạng:\n" +
+                    "1. 📌 **Chủ đề chính**: Tóm tắt ngắn gọn cuộc thảo luận xoay quanh vấn đề gì.\n" +
+                    "2. 💬 **Nội dung chi tiết**: Sử dụng các gạch đầu dòng để liệt kê các ý chính, thông tin quan trọng hoặc các mốc thời gian đáng chú ý.\n"
+                    +
+                    "3. ✅ **Kết luận/Hành động tiếp theo**: Nếu có các quyết định đã được đưa ra hoặc các công việc cần làm tiếp theo, hãy liệt kê rõ.\n\n"
+                    +
+                    "Lưu ý:\n" +
+                    "- Sử dụng tiếng Việt tự nhiên, lịch sự.\n" +
+                    "- Nếu có các tệp đính kèm (hình ảnh, video, file), hãy nhắc đến chúng nếu chúng quan trọng đối với ngữ cảnh.\n"
+                    +
+                    "- Giữ độ dài vừa phải, không quá lan man.\n\n" +
+                    "Đoạn hội thoại:\n" + transcript;
+        }
 
         // Tạo JSON body theo chuẩn Google Gemini 1.5 Flash
         Map<String, Object> requestBody = new HashMap<>();
@@ -209,5 +221,54 @@ public class AiService {
 
     public List<ChatSummary> getSummaryHistory(String roomId) {
         return chatSummaryRepository.getSummariesByRoomId(roomId);
+    }
+
+    public String askPersona(String persona, String question) {
+        String prompt = "Bạn là một chuyên gia hàng đầu về " + persona + ".\n" +
+                "QUY TẮC QUAN TRỌNG: Bạn CHỈ ĐƯỢC PHÉP trả lời các câu hỏi hoặc thảo luận về các vấn đề có liên quan trực tiếp đến " + persona + ".\n" +
+                "Nếu câu hỏi của người dùng KHÔNG liên quan đến " + persona + ", bạn PHẢI từ chối trả lời một cách lịch sự và nhắc nhở người dùng rằng bạn chỉ là chuyên gia về " + persona + ".\n\n" +
+                "Câu hỏi của người dùng:\n" + question;
+
+        Map<String, Object> requestBody = new HashMap<>();
+        Map<String, Object> contents = new HashMap<>();
+        Map<String, Object> parts = new HashMap<>();
+        parts.put("text", prompt);
+        contents.put("parts", List.of(parts));
+        requestBody.put("contents", List.of(contents));
+
+        List<String> apiKeys = java.util.Arrays.asList(
+                geminiApiKey1, geminiApiKey2, geminiApiKey3, geminiApiKey4, geminiApiKey5).stream()
+                .filter(k -> k != null && !k.isBlank()).collect(Collectors.toList());
+
+        if (apiKeys.isEmpty()) {
+            return "Hệ thống AI chưa được cấu hình. Vui lòng liên hệ quản trị viên.";
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        for (int i = 0; i < apiKeys.size(); i++) {
+            String currentKey = apiKeys.get(i);
+            try {
+                String url = GEMINI_API_URL + currentKey;
+                Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+
+                if (response != null && response.containsKey("candidates")) {
+                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+                    if (!candidates.isEmpty()) {
+                        Map<String, Object> candidate = candidates.get(0);
+                        Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
+                        List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
+                        return (String) partsList.get(0).get("text");
+                    }
+                }
+            } catch (Exception e) {
+                if (e.getMessage() != null && e.getMessage().contains("429")) {
+                    continue;
+                }
+            }
+        }
+        return "Hiện tại tất cả các chuyên gia AI đều đang bận. Vui lòng thử lại sau.";
     }
 }

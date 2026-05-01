@@ -10,4 +10,6 @@ public class AiSummarizeRequest {
     
     @NotBlank(message = "End time cannot be blank")
     private String endTime;
+
+    private boolean isUnreadOnly;
 }
