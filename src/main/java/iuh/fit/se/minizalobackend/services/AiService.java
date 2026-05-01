@@ -236,6 +236,11 @@ public class AiService {
         contents.put("parts", List.of(parts));
         requestBody.put("contents", List.of(contents));
 
+        // Enable Google Search Grounding
+        Map<String, Object> googleSearchTool = new HashMap<>();
+        googleSearchTool.put("googleSearch", new HashMap<>());
+        requestBody.put("tools", List.of(googleSearchTool));
+
         List<String> apiKeys = java.util.Arrays.asList(
                 geminiApiKey1, geminiApiKey2, geminiApiKey3, geminiApiKey4, geminiApiKey5).stream()
                 .filter(k -> k != null && !k.isBlank()).collect(Collectors.toList());
@@ -270,5 +275,84 @@ public class AiService {
             }
         }
         return "Hiện tại tất cả các chuyên gia AI đều đang bận. Vui lòng thử lại sau.";
+    }
+
+    public String translateText(String text, String targetLanguage) {
+        String prompt = "Bạn là một biên dịch viên chuyên nghiệp. Hãy dịch đoạn văn bản sau sang tiếng " + targetLanguage + ".\n" +
+                "Chỉ trả về bản dịch, không giải thích gì thêm.\n\n" +
+                "Văn bản:\n" + text;
+        return callGemini(prompt, false);
+    }
+
+    public String improveText(String text) {
+        String prompt = "Bạn là một biên tập viên chuyên nghiệp. Hãy sửa lỗi chính tả, cải thiện văn phong và làm cho đoạn văn bản sau trở nên chuyên nghiệp, trôi chảy hơn.\n" +
+                "Chỉ trả về văn bản đã được chỉnh sửa, không giải thích gì thêm.\n\n" +
+                "Văn bản gốc:\n" + text;
+        return callGemini(prompt, false);
+    }
+
+    public String extractEvents(String roomId, List<MessageDynamo> messages) {
+        if (messages.isEmpty()) {
+            return "Không có dữ liệu tin nhắn để trích xuất.";
+        }
+
+        String transcript = messages.stream()
+                .map(m -> m.getSenderName() + " (" + m.getCreatedAt() + "): " + m.getContent())
+                .collect(Collectors.joining("\n"));
+
+        String prompt = "Bạn là trợ lý AI thông minh. Hãy đọc kỹ đoạn hội thoại sau và trích xuất TOÀN BỘ các lịch hẹn, sự kiện, ngày tháng, thời gian hoặc deadline được nhắc đến.\n" +
+                "Trình bày kết quả dưới dạng danh sách rõ ràng (Bullet points). Nếu không tìm thấy sự kiện nào, hãy trả lời 'Không tìm thấy lịch hẹn hoặc sự kiện nào trong đoạn hội thoại này.'\n\n" +
+                "Hội thoại:\n" + transcript;
+        return callGemini(prompt, false);
+    }
+
+    private String callGemini(String prompt, boolean useSearch) {
+        Map<String, Object> requestBody = new HashMap<>();
+        Map<String, Object> contents = new HashMap<>();
+        Map<String, Object> parts = new HashMap<>();
+        parts.put("text", prompt);
+        contents.put("parts", List.of(parts));
+        requestBody.put("contents", List.of(contents));
+
+        if (useSearch) {
+            Map<String, Object> googleSearchTool = new HashMap<>();
+            googleSearchTool.put("googleSearch", new HashMap<>());
+            requestBody.put("tools", List.of(googleSearchTool));
+        }
+
+        List<String> apiKeys = java.util.Arrays.asList(
+                geminiApiKey1, geminiApiKey2, geminiApiKey3, geminiApiKey4, geminiApiKey5).stream()
+                .filter(k -> k != null && !k.isBlank()).collect(Collectors.toList());
+
+        if (apiKeys.isEmpty()) {
+            return "Hệ thống AI chưa được cấu hình. Vui lòng liên hệ quản trị viên.";
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        for (int i = 0; i < apiKeys.size(); i++) {
+            String currentKey = apiKeys.get(i);
+            try {
+                String url = GEMINI_API_URL + currentKey;
+                Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+
+                if (response != null && response.containsKey("candidates")) {
+                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+                    if (!candidates.isEmpty()) {
+                        Map<String, Object> candidate = candidates.get(0);
+                        Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
+                        List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
+                        return (String) partsList.get(0).get("text");
+                    }
+                }
+            } catch (Exception e) {
+                if (e.getMessage() != null && e.getMessage().contains("429")) {
+                    continue;
+                }
+            }
+        }
+        return "Hiện tại hệ thống AI đang quá tải. Vui lòng thử lại sau.";
     }
 }
