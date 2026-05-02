@@ -94,4 +94,21 @@ public class AiController {
         
         return ResponseEntity.ok(Map.of("events", events));
     }
+
+    @PostMapping("/speech-to-text")
+    public ResponseEntity<Map<String, String>> speechToText(
+            @RequestBody Map<String, String> request) {
+        
+        String base64Audio = request.get("audio");
+        String mimeType = request.getOrDefault("mimeType", "audio/mp4");
+        
+        if (base64Audio == null || base64Audio.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("text", ""));
+        }
+        
+        log.info("Requesting AI speech-to-text, mimeType: {}, audioSize: {} chars", mimeType, base64Audio.length());
+        String text = aiService.transcribeAudio(base64Audio, mimeType);
+        
+        return ResponseEntity.ok(Map.of("text", text));
+    }
 }

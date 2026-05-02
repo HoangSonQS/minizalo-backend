@@ -8,6 +8,7 @@ public class AppConstants {
     public static final String MESSAGE_TYPE_FILE = "FILE";
     public static final String MESSAGE_TYPE_FOLDER = "FOLDER";
     public static final String MESSAGE_TYPE_SYSTEM = "SYSTEM";
+    public static final String MESSAGE_TYPE_VOICE = "VOICE";
 
     /** processMessage: người nhận chỉ nhận tin từ bạn bè / không nhận tin. */
     public static final String STRANGER_MESSAGES_NOT_ALLOWED = "STRANGER_MESSAGES_NOT_ALLOWED";
