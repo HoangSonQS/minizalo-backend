@@ -22,11 +22,20 @@ public class CallSession {
     @Column(nullable = false)
     private String channelName; // conversationId dạng string
 
+    /** Conversation (chat room) id. */
+    @Column(name = "conversation_id")
+    private UUID conversationId;
+
     @Column(nullable = false)
     private UUID callerId;
 
-    @Column(nullable = false)
+    /** Receiver for 1-1 calls only. Null for group calls. */
+    @Column
     private UUID receiverId;
+
+    /** True if this session is a group call. */
+    @Column(nullable = false)
+    private boolean groupCall = false;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -44,6 +53,15 @@ public class CallSession {
 
     @Column(name = "is_delivered", nullable = false)
     private boolean delivered = false;
+
+    /**
+     * ID của tin nhắn "call log" trong DynamoDB.
+     * Dùng cho group call: khi khởi tạo → log 1 tin STARTED, khi kết thúc → update in-place
+     * cùng tin này (không tạo tin mới) để FE chỉ hiển thị 1 bubble duy nhất.
+     * Null cho call 1-1 (1-1 chỉ sinh ra 1 tin log ở thời điểm kết thúc).
+     */
+    @Column(name = "message_id")
+    private String messageId;
 
     @PrePersist
     protected void onCreate() {

@@ -260,6 +260,46 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
+    public MessageDynamo updateMessageContent(String chatRoomId, String messageId, String newContent, String newType) {
+        Optional<MessageDynamo> opt = messageDynamoRepository.getMessage(chatRoomId, messageId);
+        if (opt.isEmpty()) {
+            log.warn("[updateMessageContent] message not found room={} id={}", chatRoomId, messageId);
+            return null;
+        }
+        MessageDynamo message = opt.get();
+        if (newContent != null) message.setContent(newContent);
+        if (newType != null && !newType.isBlank()) message.setType(newType);
+        messageDynamoRepository.save(message);
+
+        // Broadcast cùng topic như tin bình thường nhưng kèm flag `messageUpdate=true`
+        // để FE phân biệt: gọi updateMessage() thay vì addMessage().
+        // (Không dùng topic phụ /updated để giảm số subscription cần maintain.)
+        try {
+            MessageDynamo normalized = normalizeMessage(message);
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("messageUpdate", true);
+            payload.put("messageId", normalized.getMessageId());
+            payload.put("chatRoomId", normalized.getChatRoomId());
+            payload.put("senderId", normalized.getSenderId());
+            payload.put("senderName", normalized.getSenderName());
+            payload.put("content", normalized.getContent());
+            payload.put("type", normalized.getType());
+            payload.put("createdAt", normalized.getCreatedAt());
+            payload.put("attachments", normalized.getAttachments());
+            payload.put("recalled", normalized.isRecalled());
+            payload.put("pinned", normalized.isPinned());
+            payload.put("reactions", normalized.getReactions());
+            payload.put("readBy", normalized.getReadBy());
+            payload.put("replyToMessageId", normalized.getReplyToMessageId());
+            String destination = "/topic/chat/" + chatRoomId;
+            messagingTemplate.convertAndSend(destination, payload);
+        } catch (Exception e) {
+            log.warn("[updateMessageContent] broadcast failed: {}", e.getMessage());
+        }
+        return message;
+    }
+
+    @Override
     public void recallMessage(String chatRoomId, String messageId) {
         recallMessage(chatRoomId, messageId, null);
     }
@@ -759,4 +799,4 @@ public class MessageServiceImpl implements MessageService {
                 ctx.hasMoreAfter()
         );
     }
-}
+}
