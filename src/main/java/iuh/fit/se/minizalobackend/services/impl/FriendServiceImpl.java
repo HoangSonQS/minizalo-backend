@@ -10,6 +10,7 @@ import iuh.fit.se.minizalobackend.repository.FriendCategoryAssignmentRepository;
 import iuh.fit.se.minizalobackend.repository.FriendRepository;
 import iuh.fit.se.minizalobackend.services.ChatRoomService;
 import iuh.fit.se.minizalobackend.services.FriendService;
+import iuh.fit.se.minizalobackend.services.NotificationService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import lombok.RequiredArgsConstructor;
 import iuh.fit.se.minizalobackend.services.MessageService;
@@ -39,6 +40,7 @@ public class FriendServiceImpl implements FriendService {
     private final ChatRoomService chatRoomService;
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationService notificationService;
 
     private static String normalizeInviteSource(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -86,7 +88,29 @@ public class FriendServiceImpl implements FriendService {
         boolean hideTimeline = Boolean.TRUE.equals(request.getHideMyTimelineFromFriend());
 
         Friend friendRequest = new Friend(null, sender, receiver, EFriendStatus.PENDING, null, msg, src, hideTimeline);
-        return mapFriendToFriendResponse(friendRepository.save(friendRequest));
+        Friend saved = friendRepository.save(friendRequest);
+
+        // Push notification cho người nhận (mobile ngoài app sẽ thấy heads-up giống call).
+        try {
+            String token = receiver.getFcmToken();
+            if (token != null && !token.isBlank()) {
+                String senderLabel = sender.getDisplayName() != null ? sender.getDisplayName() : sender.getUsername();
+                notificationService.sendNotification(
+                        receiver.getId(),
+                        token,
+                        "Lời mời kết bạn",
+                        (senderLabel != null && !senderLabel.isBlank())
+                                ? (senderLabel + " đã gửi lời mời kết bạn")
+                                : "Bạn có một lời mời kết bạn mới",
+                        null,
+                        senderLabel
+                );
+            }
+        } catch (Exception e) {
+            // Không làm fail API vì push chỉ là best-effort
+        }
+
+        return mapFriendToFriendResponse(saved);
     }
 
     @Override
