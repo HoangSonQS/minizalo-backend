@@ -70,9 +70,8 @@ public class SecurityConfig {
                 "http://localhost:*",
                 "http://127.0.0.1:*",
                 "http://10.0.2.2:*",
-                "http://192.168.1.10:*",
-                "http://192.168.1.81:*",
-                "http://192.168.1.147:*"));
+                "http://192.168.*:*",
+                "http://172.*:*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Allow all headers
         configuration.setAllowCredentials(true);

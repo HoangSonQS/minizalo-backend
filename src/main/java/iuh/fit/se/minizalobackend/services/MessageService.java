@@ -55,4 +55,11 @@ public interface MessageService {
      * @return SearchMessageResponse chứa danh sách tin nhắn khớp
      */
     SearchMessageResponse searchMessagesGlobal(String userId, String query, int limit);
+
+    /**
+     * Lấy context xung quanh tin nhắn chưa đọc cũ nhất của user trong phòng.
+     * Trả về messages xung quanh target để FlatList render và scroll chính xác.
+     */
+    iuh.fit.se.minizalobackend.dtos.response.UnreadContextResponse getUnreadContext(
+            UUID roomId, String userId, int countBefore, int countAfter);
 }

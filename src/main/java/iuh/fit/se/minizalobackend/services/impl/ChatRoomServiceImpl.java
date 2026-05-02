@@ -520,6 +520,18 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                     log.warn("Could not check interaction for room {}: {}", room.getId(), ex.getMessage());
                 }
 
+                // Calculate unread count based on lastReadAt cursor
+                try {
+                    String lastReadAtIso = null;
+                    if (membership.getLastReadAt() != null) {
+                        lastReadAtIso = membership.getLastReadAt().atZone(java.time.ZoneOffset.UTC).toInstant().toString();
+                    }
+                    long unread = messageDynamoRepository.countUnreadMessages(room.getId().toString(), user.getId().toString(), lastReadAtIso);
+                    response.setUnreadCount((int) unread);
+                } catch (Exception ex) {
+                    log.warn("Could not count unread messages for room {}: {}", room.getId(), ex.getMessage());
+                }
+
                 responses.add(response);
             } catch (Exception e) {
                 log.error("Error processing membership {}: {}", membership.getId(), e.getMessage());
