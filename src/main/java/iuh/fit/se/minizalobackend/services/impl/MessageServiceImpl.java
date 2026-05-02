@@ -468,7 +468,10 @@ public class MessageServiceImpl implements MessageService {
 
             // Broadcast system message vào channel chat chính để cả 2 phía thấy thông báo
             String actor = (actorName != null && !actorName.isBlank()) ? actorName : "Ai đó";
-            String msgType = (messageType != null && !messageType.isBlank()) ? messageType.toUpperCase() : "TEXT";
+            // Ưu tiên messageType từ request; fallback lấy type từ tin nhắn gốc trong DB
+            String msgType = (messageType != null && !messageType.isBlank())
+                    ? messageType.toUpperCase()
+                    : (message.getType() != null ? message.getType().toUpperCase() : "TEXT");
             String typeLabel;
             switch (msgType) {
                 case "IMAGE":
@@ -478,10 +481,14 @@ public class MessageServiceImpl implements MessageService {
                     typeLabel = "video";
                     break;
                 case "FILE":
-                    typeLabel = "file";
+                case "DOCUMENT":
+                    typeLabel = "tập tin";
                     break;
                 case "LINK":
                     typeLabel = "link";
+                    break;
+                case "VOICE":
+                    typeLabel = "thoại";
                     break;
                 default:
                     typeLabel = "văn bản";
@@ -553,6 +560,8 @@ public class MessageServiceImpl implements MessageService {
             return AppConstants.MESSAGE_TYPE_IMAGE;
         if (lowerMime.startsWith("video"))
             return AppConstants.MESSAGE_TYPE_VIDEO;
+        if (lowerMime.startsWith("audio"))
+            return AppConstants.MESSAGE_TYPE_VOICE;
         return AppConstants.MESSAGE_TYPE_DOCUMENT;
     }
 

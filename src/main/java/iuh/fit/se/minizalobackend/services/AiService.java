@@ -355,4 +355,59 @@ public class AiService {
         }
         return "Hiện tại hệ thống AI đang quá tải. Vui lòng thử lại sau.";
     }
+
+    public String transcribeAudio(String base64Audio, String mimeType) {
+        // Build multimodal request with audio inline data
+        Map<String, Object> requestBody = new HashMap<>();
+
+        Map<String, Object> textPart = new HashMap<>();
+        textPart.put("text", "Hãy nghe đoạn audio này và chuyển thành văn bản (speech-to-text). " +
+                "Chỉ trả về nội dung văn bản thuần túy, KHÔNG giải thích, KHÔNG thêm dấu ngoặc kép, KHÔNG format markdown.");
+
+        Map<String, Object> audioPart = new HashMap<>();
+        Map<String, Object> inlineData = new HashMap<>();
+        inlineData.put("mimeType", mimeType != null ? mimeType : "audio/mp4");
+        inlineData.put("data", base64Audio);
+        audioPart.put("inlineData", inlineData);
+
+        Map<String, Object> contents = new HashMap<>();
+        contents.put("parts", List.of(textPart, audioPart));
+        requestBody.put("contents", List.of(contents));
+
+        List<String> apiKeys = java.util.Arrays.asList(
+                geminiApiKey1, geminiApiKey2, geminiApiKey3, geminiApiKey4, geminiApiKey5).stream()
+                .filter(k -> k != null && !k.isBlank()).collect(Collectors.toList());
+
+        if (apiKeys.isEmpty()) {
+            return "";
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        for (int i = 0; i < apiKeys.size(); i++) {
+            String currentKey = apiKeys.get(i);
+            try {
+                String url = GEMINI_API_URL + currentKey;
+                Map<String, Object> response = restTemplate.postForObject(url, entity, Map.class);
+
+                if (response != null && response.containsKey("candidates")) {
+                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+                    if (!candidates.isEmpty()) {
+                        Map<String, Object> candidate = candidates.get(0);
+                        Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
+                        List<Map<String, Object>> partsList = (List<Map<String, Object>>) contentMap.get("parts");
+                        return (String) partsList.get(0).get("text");
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Transcribe audio - Key {} failed: {}", (i + 1), e.getMessage());
+                if (e.getMessage() != null && e.getMessage().contains("429")) {
+                    continue;
+                }
+            }
+        }
+        return "";
+    }
 }
