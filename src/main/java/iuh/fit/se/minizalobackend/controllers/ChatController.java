@@ -97,7 +97,8 @@ public class ChatController {
 
         messagingTemplate.convertAndSend(destination, Map.of(
                 "userId", senderId,
-                "isTyping", request.isTyping()));
+                "isTyping", request.isTyping(),
+                "typing", request.isTyping()));
     }
 
     @MessageMapping("/chat.read")
