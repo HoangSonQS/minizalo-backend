@@ -119,14 +119,13 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
                 .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
 
         Expression filterExpression = Expression.builder()
-                .expression("isPinned = :pinned")
+                .expression("pinned = :pinned")
                 .putExpressionValue(":pinned", AttributeValue.builder().bool(true).build())
                 .build();
 
         QueryEnhancedRequest.Builder requestBuilder = QueryEnhancedRequest.builder()
                 .queryConditional(queryConditional)
                 .filterExpression(filterExpression)
-                .limit(limit)
                 .scanIndexForward(false);
 
         if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
@@ -135,16 +134,33 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
         }
 
         var pagedResult = messageTable.query(requestBuilder.build());
-        Optional<Page<MessageDynamo>> firstPage = pagedResult.stream().findFirst();
+        List<MessageDynamo> resultMessages = new ArrayList<>();
+        Map<String, AttributeValue> finalLastEvaluatedKey = null;
 
-        if (firstPage.isPresent()) {
-            Page<MessageDynamo> page = firstPage.get();
-            List<MessageDynamo> messages = page.items();
-            String newLastEvaluatedKey = serializeExclusiveStartKey(page.lastEvaluatedKey());
-            return new PaginatedMessageResult(messages, newLastEvaluatedKey);
-        } else {
-            return new PaginatedMessageResult(Collections.emptyList(), null);
+        for (Page<MessageDynamo> page : pagedResult) {
+            for (MessageDynamo msg : page.items()) {
+                resultMessages.add(msg);
+                if (resultMessages.size() == limit) {
+                    break;
+                }
+            }
+            if (resultMessages.size() == limit) {
+                MessageDynamo lastMessage = resultMessages.get(resultMessages.size() - 1);
+                Map<String, AttributeValue> key = new HashMap<>();
+                key.put("chatRoomId", AttributeValue.builder().s(lastMessage.getChatRoomId()).build());
+                key.put("createdAt", AttributeValue.builder().s(lastMessage.getCreatedAt()).build());
+                finalLastEvaluatedKey = key;
+                break;
+            }
+            if (page.lastEvaluatedKey() == null) {
+                finalLastEvaluatedKey = null;
+                break;
+            }
+            finalLastEvaluatedKey = page.lastEvaluatedKey();
         }
+
+        String newLastEvaluatedKey = serializeExclusiveStartKey(finalLastEvaluatedKey);
+        return new PaginatedMessageResult(resultMessages, newLastEvaluatedKey);
     }
 
     @Override
@@ -153,7 +169,7 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
                 .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());
 
         Expression filterExpression = Expression.builder()
-                .expression("isPinned = :pinned")
+                .expression("pinned = :pinned")
                 .putExpressionValue(":pinned", AttributeValue.builder().bool(true).build())
                 .build();
 

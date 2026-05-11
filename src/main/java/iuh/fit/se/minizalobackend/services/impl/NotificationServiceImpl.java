@@ -80,6 +80,74 @@ public class NotificationServiceImpl implements NotificationService {
         }
     }
 
+    @Override
+    @Async
+    @Transactional
+    public void sendStoryNotification(UUID userId, String token, String title, String body, String storyOwnerId, String createdAt, String senderName) {
+        if (token == null || token.isEmpty()) {
+            return;
+        }
+
+        if (isExpoPushToken(token)) {
+            sendViaExpoPushStory(userId, token, title, body, storyOwnerId, createdAt, senderName);
+            return;
+        }
+
+        Notification notification = Notification.builder()
+                .setTitle(title)
+                .setBody(body)
+                .build();
+
+        Message.Builder messageBuilder = Message.builder()
+                .setToken(token)
+                .setNotification(notification)
+                .putData("storyOwnerId", storyOwnerId)
+                .putData("createdAt", createdAt);
+
+        if (senderName != null) {
+            messageBuilder.putData("senderName", senderName);
+        }
+
+        Message message = messageBuilder.build();
+
+        try {
+            FirebaseMessaging.getInstance().send(message);
+        } catch (FirebaseMessagingException e) {
+            log.error("Error sending Story FCM: {}", e.getMessage());
+            handleFcmException(userId, e);
+        }
+    }
+
+    private void sendViaExpoPushStory(UUID userId, String token, String title, String body, String storyOwnerId, String createdAt, String senderName) {
+        try {
+            ObjectNode root = objectMapper.createObjectNode();
+            root.put("to", token);
+            root.put("title", title);
+            root.put("body", body);
+            root.put("sound", "default");
+
+            ObjectNode data = objectMapper.createObjectNode();
+            data.put("storyOwnerId", storyOwnerId);
+            data.put("createdAt", createdAt);
+            if (senderName != null) {
+                data.put("senderName", senderName);
+            }
+            root.set("data", data);
+
+            String json = objectMapper.writeValueAsString(root);
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(EXPO_PUSH_URL))
+                    .timeout(Duration.ofSeconds(20))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            log.error("Expo Story push failed: {}", e.getMessage());
+        }
+    }
+
     private static boolean isExpoPushToken(String token) {
         return token.startsWith("ExponentPushToken") || token.startsWith("ExpoPushToken");
     }

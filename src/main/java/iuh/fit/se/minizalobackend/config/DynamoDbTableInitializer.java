@@ -34,6 +34,7 @@ public class DynamoDbTableInitializer {
                         maxRetries);
                 createTable(MessageDynamo.class, "messages", null);
                 createTable(ChatSummary.class, "ChatSummary", "ttl");
+                createTable(iuh.fit.se.minizalobackend.models.StoryDynamo.class, "stories", "expiresAt");
                 log.info("DynamoDB table initialization completed successfully.");
                 return;
             } catch (Exception e) {
