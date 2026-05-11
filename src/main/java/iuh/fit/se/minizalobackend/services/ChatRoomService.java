@@ -26,6 +26,9 @@ public interface ChatRoomService {
 
     java.util.List<ChatRoomResponse> getChatRoomsForUser(User user);
 
+    /** Tạo (nếu chưa có) phòng CLOUD cho user. */
+    ChatRoomResponse initCloudRoom(User user);
+
     /** Save per-user nickname for a room (used in 1-1 "đặt tên gợi nhớ"). Returns updated room. */
     ChatRoomResponse saveNickname(UUID roomId, String nickname, User actor);
 

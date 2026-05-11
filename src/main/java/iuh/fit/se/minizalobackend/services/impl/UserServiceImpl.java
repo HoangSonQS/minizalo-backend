@@ -49,6 +49,7 @@ public class UserServiceImpl implements UserService {
     private final GroupRepository groupRepository;
     private final FriendRepository friendRepository;
     private final iuh.fit.se.minizalobackend.security.JwtTokenProvider jwtTokenProvider;
+    private final iuh.fit.se.minizalobackend.services.ChatRoomService chatRoomService;
 
     @Override
     @Transactional(readOnly = true)
@@ -116,6 +117,13 @@ public class UserServiceImpl implements UserService {
         user.setRoles(roles);
         userRepository.save(user);
         userRepository.flush();
+
+        // Tạo phòng "Cloud của tôi" cho user mới đăng ký
+        try {
+            chatRoomService.initCloudRoom(user);
+        } catch (Exception e) {
+            log.warn("Failed to init cloud room for {}: {}", signupRequest.getPhone(), e.getMessage());
+        }
 
         long endTime = System.nanoTime();
         long durationMillis = (endTime - startTime) / 1_000_000;
