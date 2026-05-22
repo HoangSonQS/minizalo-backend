@@ -12,8 +12,8 @@ import iuh.fit.se.minizalobackend.models.*;
 import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
 import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
+import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.ChatRoomService;
-import iuh.fit.se.minizalobackend.services.UserService;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
@@ -29,7 +29,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     private final ChatRoomRepository chatRoomRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final GroupEventRepository groupEventRepository;
-    private final UserService userService;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
     private final iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository;
@@ -37,17 +37,71 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     public ChatRoomServiceImpl(ChatRoomRepository chatRoomRepository,
             RoomMemberRepository roomMemberRepository,
             GroupEventRepository groupEventRepository,
-            UserService userService,
+            UserRepository userRepository,
             ObjectMapper objectMapper,
             iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository,
             iuh.fit.se.minizalobackend.services.MinioService minioService) {
         this.chatRoomRepository = chatRoomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.groupEventRepository = groupEventRepository;
-        this.userService = userService;
+        this.userRepository = userRepository;
         this.objectMapper = objectMapper;
         this.messageDynamoRepository = messageDynamoRepository;
         this.minioService = minioService;
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomResponse initCloudRoom(User user) {
+        if (user == null) throw new IllegalArgumentException("User is required");
+        // Ensure single CLOUD room exists for this user
+        Optional<ChatRoom> existing = chatRoomRepository.findSingleMemberRoom(user.getId(), ERoomType.CLOUD);
+        if (existing.isPresent()) {
+            // Build response
+            return getGroupChatDetails(existing.get().getId());
+        }
+
+        // Backward-compat: if DB already has a CLOUD room (but not single-member), reuse the oldest one.
+        // Avoid creating duplicates.
+        try {
+            final List<ChatRoom> anyCloud = chatRoomRepository.findRoomsByMemberAndType(user.getId(), ERoomType.CLOUD);
+            if (anyCloud != null && !anyCloud.isEmpty()) {
+                ChatRoom pick = anyCloud.stream()
+                        .filter(Objects::nonNull)
+                        .min(Comparator.comparing(ChatRoom::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                        .orElse(anyCloud.get(0));
+                return getGroupChatDetails(pick.getId());
+            }
+        } catch (Exception ignore) {
+            // ignore and create new
+        }
+
+        ChatRoom cloud = chatRoomRepository.save(ChatRoom.builder()
+                .type(ERoomType.CLOUD)
+                .name(null)
+                .avatarUrl(null)
+                .createdBy(user)
+                .build());
+
+        RoomMember member = RoomMember.builder()
+                .room(cloud)
+                .user(user)
+                .role(ERoomRole.MEMBER)
+                .build();
+        roomMemberRepository.save(member);
+
+        ChatRoomResponse response = ChatRoomResponse.builder()
+                .id(cloud.getId())
+                .type(cloud.getType())
+                .name(null)
+                .avatarUrl(null)
+                .createdBy(convertToUserResponse(user))
+                .createdAt(cloud.getCreatedAt())
+                .members(List.of(convertToRoomMemberResponse(member)))
+                .unreadCount(0)
+                .hasInteracted(true)
+                .build();
+        return response;
     }
 
     private UserResponse convertToUserResponse(User user) {
@@ -85,7 +139,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .collect(Collectors.toList());
 
         for (UUID memberId : distinctMemberIds) {
-            Optional<User> memberOptional = userService.getUserById(memberId);
+            Optional<User> memberOptional = userRepository.findById(memberId);
             memberOptional.ifPresent(member -> {
                 RoomMember roomMember = RoomMember.builder()
                         .room(chatRoom)
@@ -156,7 +210,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 continue;
             }
 
-            Optional<User> userOptional = userService.getUserById(memberId);
+            Optional<User> userOptional = userRepository.findById(memberId);
             userOptional.ifPresent(user -> {
                 RoomMember newMember = RoomMember.builder()
                         .room(chatRoom)
@@ -455,6 +509,12 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     @Transactional
     public List<ChatRoomResponse> getChatRoomsForUser(User user) {
         log.info("Fetching chat rooms for user ID: {}", user.getId());
+        // Ensure Cloud room exists for older accounts (not created during signup)
+        try {
+            initCloudRoom(user);
+        } catch (Exception e) {
+            log.warn("Failed to ensure cloud room for user {}: {}", user.getId(), e.getMessage());
+        }
         List<RoomMember> memberships = roomMemberRepository.findByUserId(user.getId());
         log.info("Found {} memberships for user {}", memberships.size(), user.getUsername());
         List<ChatRoomResponse> responses = new ArrayList<>();
@@ -540,6 +600,9 @@ public class ChatRoomServiceImpl implements ChatRoomService {
 
         log.info("Sorting {} responses", responses.size());
         responses.sort((r1, r2) -> {
+             // CLOUD luôn ghim trên cùng
+             if (r1.getType() == ERoomType.CLOUD && r2.getType() != ERoomType.CLOUD) return -1;
+             if (r2.getType() == ERoomType.CLOUD && r1.getType() != ERoomType.CLOUD) return 1;
              String t1 = r1.getLastMessage() != null ? r1.getLastMessage().getCreatedAt() : (r1.getCreatedAt() != null ? r1.getCreatedAt().toString() : "");
              String t2 = r2.getLastMessage() != null ? r2.getLastMessage().getCreatedAt() : (r2.getCreatedAt() != null ? r2.getCreatedAt().toString() : "");
              return t2.compareTo(t1);
