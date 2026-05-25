@@ -63,7 +63,7 @@ public class StoryServiceImpl implements StoryService {
             story.setCaption(caption);
             story.setPrivacy(privacy != null ? privacy : "ALL_FRIENDS");
             story.setPermittedUserIds(permittedUserIds != null ? permittedUserIds : new ArrayList<>());
-            story.setExpiresAt(now.getEpochSecond() + 86400); // 24 hours
+            story.setExpiresAt(now.plus(java.time.Duration.ofDays(3650)).getEpochSecond()); // Keep archive, feed filters 24h.
             story.setViewers(new ArrayList<>());
             story.setReactions(new ArrayList<>());
             story.setBackgroundConfig(backgroundConfig);
@@ -93,7 +93,16 @@ public class StoryServiceImpl implements StoryService {
             // Include self
             friendIds.add(currentUserId);
 
-            List<StoryDynamo> allStories = storyRepository.getAllActiveStories(new ArrayList<>(friendIds));
+            Instant activeCutoff = Instant.now().minus(java.time.Duration.ofHours(24));
+            List<StoryDynamo> allStories = storyRepository.getAllActiveStories(new ArrayList<>(friendIds)).stream()
+                .filter(s -> {
+                    try {
+                        return s.getCreatedAt() != null && Instant.parse(s.getCreatedAt()).isAfter(activeCutoff);
+                    } catch (Exception ignored) {
+                        return false;
+                    }
+                })
+                .collect(Collectors.toList());
             
             // Filter by privacy
             List<StoryDynamo> filteredStories = allStories.stream()

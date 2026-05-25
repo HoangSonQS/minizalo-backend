@@ -27,7 +27,15 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
+import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
+import iuh.fit.se.minizalobackend.models.ChatRoom;
+import iuh.fit.se.minizalobackend.models.RoomMember;
+import iuh.fit.se.minizalobackend.models.ERoomType;
+import iuh.fit.se.minizalobackend.models.ERoomRole;
+import iuh.fit.se.minizalobackend.models.User;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -42,6 +50,12 @@ public class ChatIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ChatRoomRepository chatRoomRepository;
+
+    @Autowired
+    private RoomMemberRepository roomMemberRepository;
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
@@ -101,6 +115,34 @@ public class ChatIntegrationTest {
         mockMvc.perform(get("/api/chat/" + roomId + "/search")
                 .param("q", query)
                 .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk());
+     }
+
+    @Test
+    void testUpdateWallpaper() throws Exception {
+        User creator = userRepository.findByPhone("0987654321").orElseThrow();
+
+        // 1. Create a DIRECT room
+        ChatRoom room = chatRoomRepository.save(ChatRoom.builder()
+                .type(ERoomType.DIRECT)
+                .createdBy(creator)
+                .build());
+
+        // 2. Add creator as member
+        roomMemberRepository.save(RoomMember.builder()
+                .room(room)
+                .user(creator)
+                .role(ERoomRole.MEMBER)
+                .build());
+
+        // 3. Make request
+        java.util.Map<String, String> requestBody = new java.util.HashMap<>();
+        requestBody.put("wallpaperUrl", "minizalo-bucket/files/test.jpg");
+
+        mockMvc.perform(put("/api/chat/rooms/" + room.getId() + "/wallpaper")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(requestBody)))
                 .andExpect(status().isOk());
     }
 }

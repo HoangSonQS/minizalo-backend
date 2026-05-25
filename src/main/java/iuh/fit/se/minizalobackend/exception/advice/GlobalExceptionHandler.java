@@ -122,8 +122,70 @@ public class GlobalExceptionHandler {
                 .body(errorDetails);
     }
 
+    // ─── Custom Room Exception Handlers ───────────────────────────────
+    @ExceptionHandler(iuh.fit.se.minizalobackend.exception.custom.ChatRoomNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleChatRoomNotFound(
+            iuh.fit.se.minizalobackend.exception.custom.ChatRoomNotFoundException ex) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("timestamp", LocalDateTime.now());
+        errorDetails.put("status", HttpStatus.NOT_FOUND.value());
+        errorDetails.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
+    }
+
+    @ExceptionHandler(iuh.fit.se.minizalobackend.exception.custom.UnauthorizedRoomAccessException.class)
+    public ResponseEntity<Map<String, Object>> handleUnauthorizedRoomAccess(
+            iuh.fit.se.minizalobackend.exception.custom.UnauthorizedRoomAccessException ex) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("timestamp", LocalDateTime.now());
+        errorDetails.put("status", HttpStatus.FORBIDDEN.value());
+        errorDetails.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
+    }
+
+    @ExceptionHandler(iuh.fit.se.minizalobackend.exception.custom.UserNotInRoomException.class)
+    public ResponseEntity<Map<String, Object>> handleUserNotInRoom(
+            iuh.fit.se.minizalobackend.exception.custom.UserNotInRoomException ex) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("timestamp", LocalDateTime.now());
+        errorDetails.put("status", HttpStatus.NOT_FOUND.value());
+        errorDetails.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
+    }
+
+    @ExceptionHandler(iuh.fit.se.minizalobackend.exception.custom.UserAlreadyInRoomException.class)
+    public ResponseEntity<Map<String, Object>> handleUserAlreadyInRoom(
+            iuh.fit.se.minizalobackend.exception.custom.UserAlreadyInRoomException ex) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("timestamp", LocalDateTime.now());
+        errorDetails.put("status", HttpStatus.CONFLICT.value());
+        errorDetails.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
+    }
+
+    @ExceptionHandler(iuh.fit.se.minizalobackend.exception.custom.CannotRemoveAdminException.class)
+    public ResponseEntity<Map<String, Object>> handleCannotRemoveAdmin(
+            iuh.fit.se.minizalobackend.exception.custom.CannotRemoveAdminException ex) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("timestamp", LocalDateTime.now());
+        errorDetails.put("status", HttpStatus.BAD_REQUEST.value());
+        errorDetails.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorDetails);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGlobalException(Exception ex) {
+        ex.printStackTrace(); // Log stacktrace to console/docker logs
         Map<String, Object> errorDetails = new HashMap<>();
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());

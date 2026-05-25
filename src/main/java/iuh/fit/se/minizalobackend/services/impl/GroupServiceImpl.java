@@ -525,6 +525,23 @@ public class GroupServiceImpl implements GroupService {
             publishGroupEvent(groupChatRoom, ERoomEventType.AVATAR_CHANGED,
                     initiator.getUsername() + " changed group avatar.", null);
         }
+        if (StringUtils.hasText(request.getWallpaperUrl())
+                && !request.getWallpaperUrl().equals(groupChatRoom.getWallpaperUrl())) {
+            groupChatRoom.setWallpaperUrl(request.getWallpaperUrl());
+            changed = true;
+            publishGroupEvent(groupChatRoom, ERoomEventType.NAME_CHANGED,
+                    initiator.getUsername() + " changed group chat wallpaper.", null);
+        }
+        if (request.getDescription() != null) {
+            String nextDescription = request.getDescription().trim();
+            String oldDescription = groupChatRoom.getDescription() == null ? "" : groupChatRoom.getDescription();
+            if (!nextDescription.equals(oldDescription)) {
+                groupChatRoom.setDescription(nextDescription);
+                changed = true;
+                publishGroupEvent(groupChatRoom, ERoomEventType.NAME_CHANGED,
+                        initiator.getUsername() + " updated group description.", null);
+            }
+        }
 
         if (changed) {
             groupChatRoom.setUpdatedAt(LocalDateTime.now());
@@ -703,6 +720,8 @@ public class GroupServiceImpl implements GroupService {
         response.setId(chatRoom.getId().toString());
         response.setGroupName(chatRoom.getName());
         response.setAvatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()));
+        response.setWallpaperUrl(minioService.ensurePublicUrl(chatRoom.getWallpaperUrl()));
+        response.setDescription(chatRoom.getDescription());
         response.setOwnerId(chatRoom.getCreatedBy().getId().toString());
 
         List<GroupMemberResponse> memberResponses = roomMembers.stream()
@@ -833,17 +852,29 @@ public class GroupServiceImpl implements GroupService {
 
         // Thông báo SYSTEM trong chat để web/mobile thấy ngay (giống Zalo)
         List<String> changed = new ArrayList<>();
+        if (request.getAllowMemberChangeName() != null) {
+            changed.add("quyền sửa thông tin nhóm " + (request.getAllowMemberChangeName() ? "thành bật" : "thành tắt"));
+        }
         if (request.getAllowMemberSendMessage() != null) {
-            changed.add("quyền gửi tin nhắn " + (request.getAllowMemberSendMessage() ? "được bật" : "đã tắt"));
+            changed.add("quyền gửi tin nhắn " + (request.getAllowMemberSendMessage() ? "thành bật" : "thành tắt"));
         }
         if (request.getAllowMemberCreatePoll() != null) {
-            changed.add("quyền tạo bình chọn " + (request.getAllowMemberCreatePoll() ? "được bật" : "đã tắt"));
+            changed.add("quyền tạo bình chọn " + (request.getAllowMemberCreatePoll() ? "thành bật" : "thành tắt"));
         }
         if (request.getAllowMemberPin() != null) {
-            changed.add("quyền ghim tin nhắn " + (request.getAllowMemberPin() ? "được bật" : "đã tắt"));
+            changed.add("quyền ghim tin nhắn " + (request.getAllowMemberPin() ? "thành bật" : "thành tắt"));
+        }
+        if (request.getRequireApproval() != null) {
+            changed.add("chế độ phê duyệt thành viên mới " + (request.getRequireApproval() ? "thành bật" : "thành tắt"));
+        }
+        if (request.getAllowNewMemberReadHistory() != null) {
+            changed.add("quyền xem lịch sử trò chuyện " + (request.getAllowNewMemberReadHistory() ? "thành bật" : "thành tắt"));
+        }
+        if (request.getAllowJoinByLink() != null) {
+            changed.add("chế độ tham gia bằng link " + (request.getAllowJoinByLink() ? "thành bật" : "thành tắt"));
         }
         if (!changed.isEmpty()) {
-            String sysMsg = initiator.getUsername() + " đã cập nhật: " + String.join(", ", changed) + ".";
+            String sysMsg = displayNameOf(initiator) + " đã thay đổi " + String.join(", ", changed) + ".";
             publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
         }
 

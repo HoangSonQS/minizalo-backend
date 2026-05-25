@@ -19,4 +19,7 @@ public class UpdateGroupRequest {
     @Size(min = 3, max = 50)
     private String groupName;
     private String avatarUrl;
+    private String wallpaperUrl;
+    @Size(max = 1000)
+    private String description;
 }

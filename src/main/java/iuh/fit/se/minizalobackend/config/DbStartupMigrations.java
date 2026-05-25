@@ -30,6 +30,14 @@ public class DbStartupMigrations {
                 log.warn("[DB-MIGRATION] Skip updating chat_rooms_type_check: {}", e.getMessage());
             }
 
+            try {
+                jdbc.execute("ALTER TABLE chat_rooms ADD COLUMN IF NOT EXISTS wallpaper_url varchar(2048)");
+                jdbc.execute("ALTER TABLE chat_rooms ADD COLUMN IF NOT EXISTS description varchar(1000)");
+                log.info("[DB-MIGRATION] Ensured chat_rooms wallpaper_url/description exist");
+            } catch (Exception e) {
+                log.warn("[DB-MIGRATION] Skip ensuring chat room visual metadata: {}", e.getMessage());
+            }
+
             // 2) Ensure call_sessions.group_call exists and is NOT NULL (fix /api/call/pending 500).
             // Hibernate ddl-auto=update có thể fail khi thêm cột NOT NULL vào bảng đã có dữ liệu.
             try {
