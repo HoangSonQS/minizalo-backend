@@ -17,8 +17,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.UUID;
@@ -40,6 +42,8 @@ import iuh.fit.se.minizalobackend.models.User;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Transactional
+@Sql(scripts = "/test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 public class ChatIntegrationTest {
 
     @Autowired
@@ -71,21 +75,25 @@ public class ChatIntegrationTest {
     private io.minio.MinioClient publicMinioClient;
 
     private String accessToken;
+    private User testUser;
     private final UUID roomId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() throws Exception {
-        userRepository.deleteAll();
+        String phone = "0987" + String.format("%06d", Math.floorMod(UUID.randomUUID().hashCode(), 1_000_000));
+        String email = "chat-" + UUID.randomUUID() + "@example.com";
 
         // Register and Login
-        String verToken = jwtTokenProvider.generateVerificationToken("0987654321");
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "Password@123", null, null, verToken);
+        String verToken = jwtTokenProvider.generateVerificationToken(phone);
+        SignupRequest signupRequest = new SignupRequest("Test User", phone, email, "Password@123", null, null, verToken);
         mockMvc.perform(post("/api/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(signupRequest)))
                 .andExpect(status().isOk());
 
-        LoginRequest loginRequest = new LoginRequest("0987654321", "Password@123");
+        testUser = userRepository.findByPhone(phone).orElseThrow();
+
+        LoginRequest loginRequest = new LoginRequest(phone, "Password@123");
         MvcResult loginResult = mockMvc.perform(post("/api/auth/signin")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(loginRequest)))
@@ -120,18 +128,16 @@ public class ChatIntegrationTest {
 
     @Test
     void testUpdateWallpaper() throws Exception {
-        User creator = userRepository.findByPhone("0987654321").orElseThrow();
-
         // 1. Create a DIRECT room
         ChatRoom room = chatRoomRepository.save(ChatRoom.builder()
                 .type(ERoomType.DIRECT)
-                .createdBy(creator)
+                .createdBy(testUser)
                 .build());
 
         // 2. Add creator as member
         roomMemberRepository.save(RoomMember.builder()
                 .room(room)
-                .user(creator)
+                .user(testUser)
                 .role(ERoomRole.MEMBER)
                 .build());
 
