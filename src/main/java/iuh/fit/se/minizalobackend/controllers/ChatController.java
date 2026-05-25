@@ -355,7 +355,42 @@ public class ChatController {
         String nickname = body.getOrDefault("nickname", "");
         iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse updated =
                 chatRoomService.saveNickname(roomId, nickname, actor);
+        notifyRoomListChanged(actor.getId(), roomId);
         return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/api/chat/rooms/{roomId}/wallpaper")
+    public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse> updateWallpaper(
+            @PathVariable UUID roomId,
+            @RequestBody(required = false) Map<String, String> body,
+            Principal principal) {
+        String userId = getUserIdFromPrincipal(principal);
+        User actor = userService.getUserById(UUID.fromString(userId))
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        String wallpaperUrl = body != null ? body.getOrDefault("wallpaperUrl", "") : "";
+        log.info("Updating chat wallpaper for room {} by user {}", roomId, actor.getId());
+        iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse updated =
+                chatRoomService.updateWallpaper(roomId, wallpaperUrl, actor);
+        if (updated.getMembers() != null) {
+            updated.getMembers().forEach(member -> {
+                if (member.getUser() != null && member.getUser().getId() != null) {
+                    notifyRoomListChanged(member.getUser().getId(), roomId);
+                }
+            });
+        }
+        return ResponseEntity.ok(updated);
+    }
+
+    private void notifyRoomListChanged(UUID userId, UUID roomId) {
+        try {
+            messagingTemplate.convertAndSendToUser(
+                    userId.toString(),
+                    "/queue/rooms",
+                    Map.of("action", "UNREAD_UPDATE", "roomId", roomId.toString())
+            );
+        } catch (Exception ex) {
+            log.warn("Could not notify room list update for user {} room {}: {}", userId, roomId, ex.getMessage());
+        }
     }
 
     /**

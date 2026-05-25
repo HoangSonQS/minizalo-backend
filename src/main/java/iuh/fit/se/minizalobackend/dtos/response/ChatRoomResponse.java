@@ -17,6 +17,8 @@ public class ChatRoomResponse {
     private ERoomType type;
     private String name;
     private String avatarUrl;
+    private String wallpaperUrl;
+    private String description;
     private UserResponse createdBy;
     private LocalDateTime createdAt;
     private iuh.fit.se.minizalobackend.models.MessageDynamo lastMessage;

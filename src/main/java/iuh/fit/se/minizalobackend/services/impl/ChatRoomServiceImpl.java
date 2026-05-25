@@ -14,9 +14,14 @@ import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.ChatRoomService;
+import iuh.fit.se.minizalobackend.services.MessageService;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import jakarta.transaction.Transactional;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,6 +38,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     private final ObjectMapper objectMapper;
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
     private final iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository;
+    private final MessageService messageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public ChatRoomServiceImpl(ChatRoomRepository chatRoomRepository,
             RoomMemberRepository roomMemberRepository,
@@ -40,7 +47,9 @@ public class ChatRoomServiceImpl implements ChatRoomService {
             UserRepository userRepository,
             ObjectMapper objectMapper,
             iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository,
-            iuh.fit.se.minizalobackend.services.MinioService minioService) {
+            iuh.fit.se.minizalobackend.services.MinioService minioService,
+            MessageService messageService,
+            SimpMessagingTemplate messagingTemplate) {
         this.chatRoomRepository = chatRoomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.groupEventRepository = groupEventRepository;
@@ -48,6 +57,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         this.objectMapper = objectMapper;
         this.messageDynamoRepository = messageDynamoRepository;
         this.minioService = minioService;
+        this.messageService = messageService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Override
@@ -177,6 +188,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .type(chatRoom.getType())
                 .name(chatRoom.getName())
                 .avatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()))
+                .wallpaperUrl(minioService.ensurePublicUrl(chatRoom.getWallpaperUrl()))
+                .description(chatRoom.getDescription())
                 .createdBy(convertToUserResponse(createdBy))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
@@ -410,6 +423,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .type(chatRoom.getType())
                 .name(chatRoom.getName())
                 .avatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()))
+                .wallpaperUrl(minioService.ensurePublicUrl(chatRoom.getWallpaperUrl()))
+                .description(chatRoom.getDescription())
                 .createdBy(convertToUserResponse(chatRoom.getCreatedBy()))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
@@ -654,6 +669,64 @@ public class ChatRoomServiceImpl implements ChatRoomService {
             }
         }
         return response;
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomResponse updateWallpaper(UUID roomId, String wallpaperUrl, User actor) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new ChatRoomNotFoundException("Room with ID " + roomId + " not found."));
+
+        RoomMember membership = roomMemberRepository.findByRoomAndUser(room, actor)
+                .orElseThrow(() -> new UnauthorizedRoomAccessException("You are not a member of this room."));
+
+        room.setWallpaperUrl((wallpaperUrl != null && !wallpaperUrl.isBlank()) ? wallpaperUrl.trim() : null);
+        room.setUpdatedAt(LocalDateTime.now());
+        chatRoomRepository.save(room);
+        publishSystemChatMessage(room, actor, displayNameOf(actor) + " đã đổi hình nền cuộc trò chuyện.");
+
+        ChatRoomResponse response = getGroupChatDetails(roomId);
+        if (room.getType() == ERoomType.DIRECT) {
+            if (membership.getNickname() != null) {
+                response.setName(membership.getNickname());
+            } else {
+                response.getMembers().stream()
+                        .filter(m -> !m.getUser().getId().equals(actor.getId()))
+                        .findFirst()
+                        .ifPresent(other -> {
+                            response.setName(other.getUser().getDisplayName());
+                            response.setAvatarUrl(other.getUser().getAvatarUrl());
+                        });
+            }
+        }
+        return response;
+    }
+
+    private String displayNameOf(User user) {
+        if (user == null) return "Ai đó";
+        if (user.getDisplayName() != null && !user.getDisplayName().trim().isEmpty()) {
+            return user.getDisplayName().trim();
+        }
+        if (user.getUsername() != null && !user.getUsername().trim().isEmpty()) {
+            return user.getUsername().trim();
+        }
+        return "Ai đó";
+    }
+
+    private void publishSystemChatMessage(ChatRoom room, User actor, String content) {
+        try {
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(room.getId().toString());
+            message.setCreatedAt(Instant.now().toString());
+            message.setSenderId("SYSTEM");
+            message.setSenderName(displayNameOf(actor));
+            message.setContent(content);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo saved = messageService.saveMessage(message);
+            messagingTemplate.convertAndSend("/topic/chat/" + room.getId(), saved);
+        } catch (Exception ex) {
+            log.warn("Could not publish wallpaper system message for room {}: {}", room.getId(), ex.getMessage());
+        }
     }
 
     @Override

@@ -32,6 +32,9 @@ public interface ChatRoomService {
     /** Save per-user nickname for a room (used in 1-1 "đặt tên gợi nhớ"). Returns updated room. */
     ChatRoomResponse saveNickname(UUID roomId, String nickname, User actor);
 
+    /** Save shared room wallpaper. Returns updated room. */
+    ChatRoomResponse updateWallpaper(UUID roomId, String wallpaperUrl, User actor);
+
     /**
      * Xóa đoạn chat: xóa toàn bộ tin nhắn + xóa membership của actor.
      * Đối với DIRECT: chỉ xóa membership của actor (người kia vẫn còn room).

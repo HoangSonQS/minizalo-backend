@@ -12,13 +12,16 @@ import iuh.fit.se.minizalobackend.services.StoryService;
 import iuh.fit.se.minizalobackend.services.NotificationService;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +36,7 @@ public class StoryServiceImpl implements StoryService {
     private final FriendRepository friendRepository;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     public StoryResponse createStory(User user, MultipartFile file, String caption, String storyType, String privacy, List<String> permittedUserIds, String backgroundConfig) throws IOException {
@@ -59,12 +63,13 @@ public class StoryServiceImpl implements StoryService {
             story.setCaption(caption);
             story.setPrivacy(privacy != null ? privacy : "ALL_FRIENDS");
             story.setPermittedUserIds(permittedUserIds != null ? permittedUserIds : new ArrayList<>());
-            story.setExpiresAt(now.getEpochSecond() + 86400); // 24 hours
+            story.setExpiresAt(now.plus(java.time.Duration.ofDays(3650)).getEpochSecond()); // Keep archive, feed filters 24h.
             story.setViewers(new ArrayList<>());
             story.setReactions(new ArrayList<>());
             story.setBackgroundConfig(backgroundConfig);
 
             storyRepository.save(story);
+            broadcastStoryEvent("STORY_CREATED", user.getId().toString(), story.getCreatedAt(), null);
 
             return mapToResponse(story, user);
         } catch (Exception e) {
@@ -88,7 +93,16 @@ public class StoryServiceImpl implements StoryService {
             // Include self
             friendIds.add(currentUserId);
 
-            List<StoryDynamo> allStories = storyRepository.getAllActiveStories(new ArrayList<>(friendIds));
+            Instant activeCutoff = Instant.now().minus(java.time.Duration.ofHours(24));
+            List<StoryDynamo> allStories = storyRepository.getAllActiveStories(new ArrayList<>(friendIds)).stream()
+                .filter(s -> {
+                    try {
+                        return s.getCreatedAt() != null && Instant.parse(s.getCreatedAt()).isAfter(activeCutoff);
+                    } catch (Exception ignored) {
+                        return false;
+                    }
+                })
+                .collect(Collectors.toList());
             
             // Filter by privacy
             List<StoryDynamo> filteredStories = allStories.stream()
@@ -142,11 +156,13 @@ public class StoryServiceImpl implements StoryService {
     @Override
     public void deleteStory(User user, String createdAt) {
         storyRepository.delete(user.getId().toString(), createdAt);
+        broadcastStoryEvent("STORY_DELETED", user.getId().toString(), createdAt, null);
     }
 
     @Override
     public void updatePrivacy(User user, String createdAt, String privacy, List<String> permittedUserIds) {
         storyRepository.updatePrivacy(user.getId().toString(), createdAt, privacy, permittedUserIds);
+        broadcastStoryEvent("STORY_PRIVACY_UPDATED", user.getId().toString(), createdAt, null);
     }
 
     @Override
@@ -159,6 +175,9 @@ public class StoryServiceImpl implements StoryService {
             if (!story.getViewers().contains(user.getId().toString())) {
                 story.getViewers().add(user.getId().toString());
                 storyRepository.save(story);
+                Map<String, Object> extra = new HashMap<>();
+                extra.put("viewerId", user.getId().toString());
+                broadcastStoryEvent("STORY_VIEWED", userId, createdAt, extra);
             }
         });
     }
@@ -172,6 +191,10 @@ public class StoryServiceImpl implements StoryService {
             story.getReactions().removeIf(r -> r.startsWith(user.getId().toString() + ":"));
             story.getReactions().add(entry);
             storyRepository.save(story);
+            Map<String, Object> extra = new HashMap<>();
+            extra.put("reactionUserId", user.getId().toString());
+            extra.put("reactionType", type);
+            broadcastStoryEvent("STORY_REACTED", userId, createdAt, extra);
 
             // Send notification to story owner
             if (!user.getId().toString().equals(userId)) {
@@ -185,6 +208,15 @@ public class StoryServiceImpl implements StoryService {
                 });
             }
         });
+    }
+
+    private void broadcastStoryEvent(String type, String ownerId, String createdAt, Map<String, Object> extra) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", type);
+        payload.put("ownerId", ownerId);
+        payload.put("createdAt", createdAt);
+        if (extra != null) payload.putAll(extra);
+        messagingTemplate.convertAndSend("/topic/social/stories", payload);
     }
 
     private StoryResponse mapToResponse(StoryDynamo story, User user) {
