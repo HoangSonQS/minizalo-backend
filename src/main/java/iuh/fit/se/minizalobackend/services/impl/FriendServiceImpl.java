@@ -345,6 +345,23 @@ public class FriendServiceImpl implements FriendService {
     }
 
     @Override
+    @Transactional
+    public FriendResponse updateHideMyTimelineFromFriend(UUID currentUserId, UUID friendId, boolean hidden) {
+        User currentUser = userService.getUserById(currentUserId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + currentUserId));
+        User friendUser = userService.getUserById(friendId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + friendId));
+
+        Friend friendship = friendRepository.findByUserAndFriend(currentUser, friendUser)
+                .orElseThrow(() -> new IllegalArgumentException("Friendship not found."));
+        if (friendship.getStatus() != EFriendStatus.ACCEPTED && friendship.getStatus() != EFriendStatus.BLOCKED) {
+            throw new IllegalStateException("Friendship is not active.");
+        }
+        friendship.setHideMyTimelineFromFriend(hidden);
+        return mapFriendToFriendResponse(friendRepository.save(friendship));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public java.util.Map<String, Object> checkBlockStatus(UUID currentUserId, UUID otherUserId) {
         User currentUser = userService.getUserById(currentUserId)

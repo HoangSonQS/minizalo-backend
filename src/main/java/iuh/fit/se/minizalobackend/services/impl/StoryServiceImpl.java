@@ -89,6 +89,10 @@ public class StoryServiceImpl implements StoryService {
             java.util.Set<String> friendIds = new java.util.HashSet<>();
             friendsAsUser.forEach(f -> friendIds.add(f.getFriend().getId().toString()));
             friendsAsFriend.forEach(f -> friendIds.add(f.getUser().getId().toString()));
+            java.util.Set<String> hiddenOwnerIds = friendsAsFriend.stream()
+                    .filter(f -> Boolean.TRUE.equals(f.getHideMyTimelineFromFriend()))
+                    .map(f -> f.getUser().getId().toString())
+                    .collect(Collectors.toSet());
             
             // Include self
             friendIds.add(currentUserId);
@@ -109,6 +113,7 @@ public class StoryServiceImpl implements StoryService {
                 .filter(s -> {
                     // Own stories are always visible
                     if (s.getUserId().equals(currentUserId)) return true;
+                    if (hiddenOwnerIds.contains(s.getUserId())) return false;
                     
                     String privacy = s.getPrivacy() != null ? s.getPrivacy() : "ALL_FRIENDS";
                     List<String> permitted = s.getPermittedUserIds() != null ? s.getPermittedUserIds() : new ArrayList<>();

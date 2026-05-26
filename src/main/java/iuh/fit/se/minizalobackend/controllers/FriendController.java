@@ -148,6 +148,20 @@ public class FriendController {
         return ResponseEntity.ok(blocked);
     }
 
+    @PutMapping("/{friendId}/timeline-privacy")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> updateTimelinePrivacy(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @PathVariable UUID friendId,
+            @RequestParam(defaultValue = "false") boolean hidden) {
+        try {
+            FriendResponse response = friendService.updateHideMyTimelineFromFriend(userDetails.getId(), friendId, hidden);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
     @GetMapping("/block-status/{userId}")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
     public ResponseEntity<?> checkBlockStatus(
