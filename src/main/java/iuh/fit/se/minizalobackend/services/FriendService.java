@@ -33,5 +33,8 @@ public interface FriendService {
     List<iuh.fit.se.minizalobackend.payload.response.FriendResponse> getBlockedUsers(UUID userId);
 
     // Kiểm tra trạng thái chặn giữa hai user
+    iuh.fit.se.minizalobackend.payload.response.FriendResponse updateHideMyTimelineFromFriend(UUID currentUserId,
+            UUID friendId, boolean hidden);
+
     Map<String, Object> checkBlockStatus(UUID currentUserId, UUID otherUserId);
 }

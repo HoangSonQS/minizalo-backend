@@ -32,6 +32,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -193,7 +194,9 @@ public class SocialPostController {
             visibleUserIds.add(f.getFriend().getId());
         }
         for (Friend f : friendRepository.findByFriendAndStatus(user, EFriendStatus.ACCEPTED)) {
-            visibleUserIds.add(f.getUser().getId());
+            if (!Boolean.TRUE.equals(f.getHideMyTimelineFromFriend())) {
+                visibleUserIds.add(f.getUser().getId());
+            }
         }
         List<SocialPost> posts = postRepository.findByUser_IdInOrderByCreatedAtDesc(visibleUserIds);
         List<SocialPost> filtered = posts.stream()
@@ -335,12 +338,20 @@ public class SocialPostController {
                 || friendRepository.findByFriendAndStatus(user, EFriendStatus.ACCEPTED).stream()
                 .anyMatch(f -> f.getUser().getId().equals(post.getUser().getId()));
         if (!isFriend) throw new RuntimeException("Post not visible");
+        Optional<Friend> ownerToViewer = friendRepository.findByUserAndFriend(post.getUser(), user);
+        if (ownerToViewer.isPresent() && Boolean.TRUE.equals(ownerToViewer.get().getHideMyTimelineFromFriend())) {
+            throw new RuntimeException("Post not visible");
+        }
         if (!canViewPost(user, post)) throw new RuntimeException("Post not visible");
         return post;
     }
 
     private boolean canViewPost(User user, SocialPost post) {
         if (post.getUser().getId().equals(user.getId())) return true;
+        Optional<Friend> ownerToViewer = friendRepository.findByUserAndFriend(post.getUser(), user);
+        if (ownerToViewer.isPresent() && Boolean.TRUE.equals(ownerToViewer.get().getHideMyTimelineFromFriend())) {
+            return false;
+        }
         String privacy = post.getPrivacy() != null ? post.getPrivacy() : "ALL_FRIENDS";
         List<String> permitted = splitIds(post.getPermittedUserIds());
         String currentUserId = user.getId().toString();
