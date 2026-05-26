@@ -302,7 +302,12 @@ public class UserServiceImpl implements UserService {
     public void updateFcmToken(UUID userId, String token) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        user.setFcmToken(token);
+        String normalizedToken = token == null ? null : token.trim();
+        if (normalizedToken != null && normalizedToken.length() >= 2
+                && normalizedToken.startsWith("\"") && normalizedToken.endsWith("\"")) {
+            normalizedToken = normalizedToken.substring(1, normalizedToken.length() - 1).trim();
+        }
+        user.setFcmToken(normalizedToken == null || normalizedToken.isBlank() ? null : normalizedToken);
         userRepository.save(user);
     }
 

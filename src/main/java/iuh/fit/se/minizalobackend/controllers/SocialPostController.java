@@ -23,6 +23,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -202,6 +203,7 @@ public class SocialPostController {
     }
 
     @PutMapping("/{postId}/privacy")
+    @Transactional
     @Operation(summary = "Update timeline post privacy")
     public ResponseEntity<SocialPostResponse> updatePrivacy(
             @PathVariable UUID postId,
@@ -213,10 +215,25 @@ public class SocialPostController {
         if (!post.getUser().getId().equals(user.getId())) throw new RuntimeException("Cannot update this post");
         post.setPrivacy(normalizePrivacy(privacy));
         post.setPermittedUserIds(joinIds(permittedUserIds));
-        SocialPost saved = postRepository.save(post);
-        SocialPostResponse response = map(saved);
+        SocialPostResponse response = map(postRepository.save(post));
         broadcastPostChanged("POST_PRIVACY_UPDATED", postId, user.getId());
         return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{postId}")
+    @Transactional
+    @Operation(summary = "Delete my timeline post")
+    public ResponseEntity<Void> deletePost(@PathVariable UUID postId) {
+        User user = getCurrentUser();
+        SocialPost post = postRepository.findById(postId)
+                .orElseThrow(() -> new RuntimeException("Post not found"));
+        if (!post.getUser().getId().equals(user.getId())) throw new RuntimeException("Cannot delete this post");
+        reactionRepository.deleteByPostId(postId);
+        commentRepository.deleteByPostId(postId);
+        mediaRepository.deleteByPostId(postId);
+        postRepository.delete(post);
+        broadcastPostChanged("POST_DELETED", postId, user.getId());
+        return ResponseEntity.noContent().build();
     }
 
     private SocialPostResponse map(SocialPost post) {
