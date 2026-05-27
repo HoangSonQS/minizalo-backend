@@ -4,12 +4,18 @@ import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.payload.request.ChatMessageRequest;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public interface MessageService {
     MessageDynamo saveMessage(MessageDynamo message);
 
     void deleteAllMessages(String chatRoomId);
+
+    void deleteCloudMessage(String chatRoomId, String messageId, String requesterId);
+
+    void deleteCloudMediaItems(String chatRoomId, List<Map<String, String>> items, String requesterId);
 
     PaginatedMessageResult getRoomMessages(UUID roomId, String lastKey, int limit);
 

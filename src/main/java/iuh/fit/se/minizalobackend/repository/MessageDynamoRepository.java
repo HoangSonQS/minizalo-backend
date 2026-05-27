@@ -9,6 +9,8 @@ public interface MessageDynamoRepository {
 
     void deleteAllByRoomId(String chatRoomId);
 
+    boolean deleteByMessageId(String chatRoomId, String messageId);
+
     PaginatedMessageResult getMessagesByRoomId(String chatRoomId, String lastEvaluatedKey, int limit);
     
     // Thêm hàm lấy tin nhắn trong khoảng thời gian phục vụ AI Summarize
