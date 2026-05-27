@@ -58,6 +58,21 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
     }
 
     @Override
+    public boolean deleteByMessageId(String chatRoomId, String messageId) {
+        Optional<MessageDynamo> message = getMessage(chatRoomId, messageId);
+        if (message.isEmpty()) {
+            return false;
+        }
+        MessageDynamo msg = message.get();
+        Key key = Key.builder()
+                .partitionValue(msg.getChatRoomId())
+                .sortValue(msg.getCreatedAt())
+                .build();
+        messageTable.deleteItem(key);
+        return true;
+    }
+
+    @Override
     public PaginatedMessageResult getMessagesByRoomId(String chatRoomId, String lastEvaluatedKey, int limit) {
         QueryConditional queryConditional = QueryConditional
                 .keyEqualTo(Key.builder().partitionValue(chatRoomId).build());

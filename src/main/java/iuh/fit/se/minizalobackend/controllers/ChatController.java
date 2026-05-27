@@ -310,6 +310,26 @@ public class ChatController {
         messageService.recallMessage(recallMessageRequest.getRoomId(), recallMessageRequest.getMessageId(), requesterId);
     }
 
+    @DeleteMapping("/api/messages/cloud/{roomId}/{messageId}")
+    public ResponseEntity<Void> deleteCloudMessage(
+            @PathVariable String roomId,
+            @PathVariable String messageId,
+            Principal principal) {
+        String requesterId = getUserIdFromPrincipal(principal);
+        messageService.deleteCloudMessage(roomId, messageId, requesterId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/api/messages/cloud/{roomId}/media/delete")
+    public ResponseEntity<Void> deleteCloudMediaItems(
+            @PathVariable String roomId,
+            @RequestBody Map<String, List<Map<String, String>>> request,
+            Principal principal) {
+        String requesterId = getUserIdFromPrincipal(principal);
+        messageService.deleteCloudMediaItems(roomId, request.get("items"), requesterId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/api/chat/{roomId}/search")
     public ResponseEntity<iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse> searchMessages(
             @PathVariable UUID roomId,

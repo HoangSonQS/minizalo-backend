@@ -31,9 +31,11 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -57,6 +59,168 @@ public class MessageServiceImpl implements MessageService {
     public void deleteAllMessages(String chatRoomId) {
         log.info("Deleting all messages for room: {}", chatRoomId);
         messageDynamoRepository.deleteAllByRoomId(chatRoomId);
+    }
+
+    @Override
+    public void deleteCloudMessage(String chatRoomId, String messageId, String requesterId) {
+        ChatRoom room = chatRoomRepository.findById(UUID.fromString(chatRoomId))
+                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
+        if (room.getType() != ERoomType.CLOUD) {
+            throw new IllegalArgumentException("Only cloud messages can be deleted here");
+        }
+        if (requesterId == null || !roomMemberRepository.existsByRoom_IdAndUser_Id(room.getId(), UUID.fromString(requesterId))) {
+            throw new IllegalArgumentException("Not allowed to delete this cloud message");
+        }
+        MessageDynamo message = messageDynamoRepository.getMessage(chatRoomId, messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        if (requesterId != null && message.getSenderId() != null && !requesterId.equals(message.getSenderId())) {
+            throw new IllegalArgumentException("Only sender can delete this cloud message");
+        }
+        boolean deleted = messageDynamoRepository.deleteByMessageId(chatRoomId, messageId);
+        if (!deleted) {
+            throw new IllegalArgumentException("Message not found");
+        }
+        messagingTemplate.convertAndSend("/topic/chat/" + chatRoomId + "/recall", Map.of(
+                "messageId", messageId,
+                "deleted", true,
+                "recalledAt", Instant.now().toString()));
+        log.info("Cloud message {} deleted in room {}", messageId, chatRoomId);
+    }
+
+    @Override
+    public void deleteCloudMediaItems(String chatRoomId, List<Map<String, String>> items, String requesterId) {
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("No media selected");
+        }
+        ChatRoom room = chatRoomRepository.findById(UUID.fromString(chatRoomId))
+                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
+        if (room.getType() != ERoomType.CLOUD) {
+            throw new IllegalArgumentException("Only cloud media can be deleted here");
+        }
+        if (requesterId == null || !roomMemberRepository.existsByRoom_IdAndUser_Id(room.getId(), UUID.fromString(requesterId))) {
+            throw new IllegalArgumentException("Not allowed to delete this cloud media");
+        }
+
+        Set<String> normalizedUrls = new HashSet<>();
+        Set<String> selectedMessageIds = new HashSet<>();
+        for (Map<String, String> item : items) {
+            if (item == null) continue;
+            String url = item.get("url");
+            if (url != null && !url.isBlank()) {
+                normalizedUrls.add(normalizeUrlForCompare(url));
+            }
+            String messageId = item.get("messageId");
+            if (messageId != null && !messageId.isBlank()) {
+                selectedMessageIds.add(messageId);
+            }
+        }
+        if (normalizedUrls.isEmpty()) {
+            throw new IllegalArgumentException("No media selected");
+        }
+
+        List<MessageDynamo> messages = new ArrayList<>();
+        for (String messageId : selectedMessageIds) {
+            messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(messages::add);
+        }
+        if (messages.isEmpty()) {
+            PaginatedMessageResult result = messageDynamoRepository.getMessagesByRoomId(chatRoomId, null, 1000);
+            messages.addAll(result.getMessages());
+        }
+
+        int deletedCount = 0;
+        for (MessageDynamo message : messages) {
+            if (message.getSenderId() != null && !requesterId.equals(message.getSenderId())) {
+                continue;
+            }
+            if (message.getAttachments() == null || message.getAttachments().isEmpty()) {
+                if (message.getContent() != null && urlMatchesAny(message.getContent().trim(), normalizedUrls)) {
+                    if (messageDynamoRepository.deleteByMessageId(chatRoomId, message.getMessageId())) {
+                        deletedCount++;
+                        broadcastCloudMediaDelete(chatRoomId, message.getMessageId());
+                    }
+                }
+                continue;
+            }
+
+            int before = message.getAttachments().size();
+            message.setAttachments(message.getAttachments().stream()
+                    .filter(att -> att == null || att.getUrl() == null || !urlMatchesAny(att.getUrl(), normalizedUrls))
+                    .toList());
+            int removed = before - message.getAttachments().size();
+            if (removed <= 0) {
+                continue;
+            }
+            deletedCount += removed;
+            if (message.getAttachments().isEmpty()) {
+                messageDynamoRepository.deleteByMessageId(chatRoomId, message.getMessageId());
+                broadcastCloudMediaDelete(chatRoomId, message.getMessageId());
+            } else {
+                messageDynamoRepository.save(message);
+                broadcastMessageUpdate(chatRoomId, message);
+            }
+        }
+
+        if (deletedCount == 0) {
+            throw new IllegalArgumentException("No matching media found");
+        }
+        log.info("Deleted {} cloud media item(s) in room {}", deletedCount, chatRoomId);
+    }
+
+    private String normalizeUrlForCompare(String url) {
+        String trimmed = url == null ? "" : url.trim();
+        int queryIndex = trimmed.indexOf('?');
+        String noQuery = queryIndex >= 0 ? trimmed.substring(0, queryIndex) : trimmed;
+        try {
+            return java.net.URLDecoder.decode(noQuery, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            return noQuery;
+        }
+    }
+
+    private boolean urlMatchesAny(String url, Set<String> normalizedUrls) {
+        String normalized = normalizeUrlForCompare(url);
+        for (String selected : normalizedUrls) {
+            if (normalized.equals(selected) || normalized.endsWith(selected) || selected.endsWith(normalized)) {
+                return true;
+            }
+            String normalizedFile = normalized.substring(normalized.lastIndexOf('/') + 1);
+            String selectedFile = selected.substring(selected.lastIndexOf('/') + 1);
+            if (!normalizedFile.isBlank() && normalizedFile.equals(selectedFile)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void broadcastCloudMediaDelete(String chatRoomId, String messageId) {
+        messagingTemplate.convertAndSend("/topic/chat/" + chatRoomId + "/recall", Map.of(
+                "messageId", messageId,
+                "deleted", true,
+                "recalledAt", Instant.now().toString()));
+    }
+
+    private void broadcastMessageUpdate(String chatRoomId, MessageDynamo message) {
+        try {
+            MessageDynamo normalized = normalizeMessage(message);
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("messageUpdate", true);
+            payload.put("messageId", normalized.getMessageId());
+            payload.put("chatRoomId", normalized.getChatRoomId());
+            payload.put("senderId", normalized.getSenderId());
+            payload.put("senderName", normalized.getSenderName());
+            payload.put("content", normalized.getContent());
+            payload.put("type", normalized.getType());
+            payload.put("createdAt", normalized.getCreatedAt());
+            payload.put("attachments", normalized.getAttachments());
+            payload.put("recalled", normalized.isRecalled());
+            payload.put("pinned", normalized.isPinned());
+            payload.put("reactions", normalized.getReactions());
+            payload.put("readBy", normalized.getReadBy());
+            payload.put("replyToMessageId", normalized.getReplyToMessageId());
+            messagingTemplate.convertAndSend("/topic/chat/" + chatRoomId, payload);
+        } catch (Exception e) {
+            log.warn("[broadcastMessageUpdate] failed: {}", e.getMessage());
+        }
     }
 
     @Override
