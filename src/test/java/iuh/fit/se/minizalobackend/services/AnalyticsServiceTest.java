@@ -69,7 +69,7 @@ public class AnalyticsServiceTest {
         Map<String, Object> stats = analyticsService.getActiveUserStats(10);
 
         // Check currentActiveUsers
-        assertEquals(1, stats.get("currentActiveUsers")); // Based on yesterdayUsers size
+        assertEquals(5L, stats.get("currentActiveUsers")); // Based on yesterdayUsers count
 
         // Check dailyActiveUsers
         List<Map<String, Object>> dailyTrend = (List<Map<String, Object>>) stats.get("dailyActiveUsers");

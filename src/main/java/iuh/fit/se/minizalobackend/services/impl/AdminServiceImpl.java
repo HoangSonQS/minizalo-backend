@@ -1,0 +1,112 @@
+package iuh.fit.se.minizalobackend.services.impl;
+
+import iuh.fit.se.minizalobackend.models.User;
+import iuh.fit.se.minizalobackend.models.ChatRoom;
+import iuh.fit.se.minizalobackend.models.Role;
+import iuh.fit.se.minizalobackend.models.UserActivity;
+import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
+import iuh.fit.se.minizalobackend.repository.RoleRepository;
+import iuh.fit.se.minizalobackend.repository.UserActivityRepository;
+import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.services.AdminService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class AdminServiceImpl implements AdminService {
+
+    private final UserRepository userRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final UserActivityRepository userActivityRepository;
+    private final RoleRepository roleRepository;
+
+    @Override
+    public List<Map<String, Object>> getAllUsers() {
+        return userRepository.findAll().stream().map(user -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", user.getId().toString());
+            map.put("name", user.getUsername());
+            map.put("email", user.getEmail());
+            String role = user.getRoles().stream()
+                    .map(r -> r.getName().name())
+                    .findFirst()
+                    .orElse("ROLE_USER");
+            map.put("role", role);
+            String state = user.getAccountLocked() != null && user.getAccountLocked() ? "Locked" : (user.getIsOnline() != null && user.getIsOnline() ? "Online" : "Active");
+            map.put("state", state);
+            map.put("messages", 0); // Simplified for MVP
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Map<String, Object>> getAllRooms() {
+        return chatRoomRepository.findAll().stream().map(room -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", room.getId().toString());
+            map.put("name", room.getName() != null ? room.getName() : "Direct Chat");
+            map.put("type", room.getType().name());
+            map.put("members", 0); // Simplified for MVP
+            map.put("messages", 0); // Simplified for MVP
+            map.put("updatedAt", room.getUpdatedAt() != null ? room.getUpdatedAt().toString() : "");
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Map<String, Object>> getAuditLogs(int limit) {
+        return userActivityRepository.findAll(
+                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "timestamp"))
+        ).stream().map(activity -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("time", activity.getTimestamp().toString());
+            map.put("actor", activity.getUser() != null ? activity.getUser().getUsername() : "System");
+            map.put("action", activity.getActivityType());
+            map.put("target", activity.getDetails());
+            map.put("status", "Hoàn tất");
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public Map<String, Object> grantRole(String phone, String roleName) {
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng với SĐT: " + phone));
+        
+        iuh.fit.se.minizalobackend.models.ERole eRole;
+        try {
+            eRole = iuh.fit.se.minizalobackend.models.ERole.valueOf(roleName);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Quyền không hợp lệ: " + roleName);
+        }
+
+        Role role = roleRepository.findByName(eRole)
+                .orElseGet(() -> {
+                    Role newRole = new Role();
+                    newRole.setName(eRole);
+                    return roleRepository.save(newRole);
+                });
+
+        if (user.getRoles().contains(role)) {
+            throw new RuntimeException("Người dùng đã có quyền này.");
+        }
+
+        user.getRoles().add(role);
+        userRepository.save(user);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "Đã cấp quyền " + roleName + " cho SĐT " + phone);
+        return response;
+    }
+}
