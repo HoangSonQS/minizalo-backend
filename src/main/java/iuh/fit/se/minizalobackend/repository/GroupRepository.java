@@ -14,4 +14,8 @@ public interface GroupRepository extends JpaRepository<ChatRoom, UUID> {
     Optional<ChatRoom> findByIdAndType(UUID id, ERoomType type);
 
     List<ChatRoom> findByCreatedBy_IdAndType(UUID createdById, ERoomType type);
+
+    List<ChatRoom> findByType(ERoomType type);
+
+    long countByType(ERoomType type);
 }

@@ -3,7 +3,10 @@ package iuh.fit.se.minizalobackend.repository;
 import iuh.fit.se.minizalobackend.models.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,4 +43,23 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("UPDATE User u SET u.isOnline = false")
     @Transactional
     void updateAllUsersOffline();
+
+    long countByAccountLockedTrue();
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:q IS NULL OR :q = '' OR
+                   LOWER(u.username) LIKE LOWER(CONCAT('%', :q, '%')) OR
+                   LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%')) OR
+                   LOWER(u.phone) LIKE LOWER(CONCAT('%', :q, '%')) OR
+                   LOWER(u.displayName) LIKE LOWER(CONCAT('%', :q, '%')))
+              AND (:locked IS NULL OR u.accountLocked = :locked)
+            """)
+    Page<User> adminSearchUsers(@Param("q") String q, @Param("locked") Boolean locked, Pageable pageable);
+
+    @Query("""
+            SELECT DISTINCT u FROM User u JOIN u.roles r
+            WHERE r.name = iuh.fit.se.minizalobackend.models.ERole.ROLE_ADMIN
+            """)
+    List<User> findAllAdmins();
 }
