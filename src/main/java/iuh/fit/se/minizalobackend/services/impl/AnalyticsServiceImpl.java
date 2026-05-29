@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -63,12 +64,17 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         Map<String, Object> stats = new HashMap<>();
         LocalDateTime since = LocalDateTime.now().minusDays(30); // Default lookback 30 days
 
-        stats.put("currentActiveUsers",
-                activityRepository.countActiveUsersPerDay(LocalDateTime.now().minusDays(1)).size()); // Valid simplistic
-                                                                                                     // 'today' count
+        List<Object[]> dailyActiveData = activityRepository.countActiveUsersPerDay(since);
+        
+        long currentActive = 0;
+        if (!dailyActiveData.isEmpty()) {
+            currentActive = ((Number) dailyActiveData.get(dailyActiveData.size() - 1)[1]).longValue();
+        }
+        
+        stats.put("currentActiveUsers", currentActive);
 
         // Time series
-        stats.put("dailyActiveUsers", activityRepository.countActiveUsersPerDay(since).stream()
+        stats.put("dailyActiveUsers", dailyActiveData.stream()
                 .map(row -> Map.of("date", row[0].toString(), "count", row[1]))
                 .toList());
         return stats;
