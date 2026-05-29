@@ -39,4 +39,6 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, UUID> {
           AND m.room.type = :type
     """)
     List<ChatRoom> findRoomsByMemberAndType(@Param("userId") UUID userId, @Param("type") ERoomType type);
+
+    long countByType(ERoomType type);
 }
