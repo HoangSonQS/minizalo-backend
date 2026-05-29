@@ -14,6 +14,10 @@ public interface UserActivityRepository extends JpaRepository<UserActivity, UUID
 
         List<UserActivity> findByUser_IdOrderByTimestampDesc(UUID userId);
 
+        java.util.Optional<UserActivity> findFirstByActivityTypeAndDetailsContainingOrderByTimestampDesc(String activityType, String detailsPart);
+
+        long countByActivityTypeAndDetailsContaining(String activityType, String detailsPart);
+
         @Query("SELECT COUNT(ua) FROM UserActivity ua WHERE ua.activityType = :type AND ua.timestamp >= :since")
         long countByActivityTypeAndTimestampAfter(String type, LocalDateTime since);
 

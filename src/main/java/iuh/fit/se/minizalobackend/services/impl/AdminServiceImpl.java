@@ -8,6 +8,10 @@ import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
 import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.UserActivityRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
+import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
+import iuh.fit.se.minizalobackend.models.RoomMember;
+import iuh.fit.se.minizalobackend.models.UserActivity;
 import iuh.fit.se.minizalobackend.services.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +33,8 @@ public class AdminServiceImpl implements AdminService {
     private final ChatRoomRepository chatRoomRepository;
     private final UserActivityRepository userActivityRepository;
     private final RoleRepository roleRepository;
+    private final RoomMemberRepository roomMemberRepository;
+    private final MessageDynamoRepository messageDynamoRepository;
 
     @Override
     public List<Map<String, Object>> getAllUsers() {
@@ -37,7 +43,8 @@ public class AdminServiceImpl implements AdminService {
             map.put("id", user.getId().toString());
             map.put("name", user.getUsername());
             map.put("email", user.getEmail());
-            String role = user.getRoles().stream()
+            boolean isAdmin = user.getRoles().stream().anyMatch(r -> r.getName().name().equals("ROLE_ADMIN"));
+            String role = isAdmin ? "ROLE_ADMIN" : user.getRoles().stream()
                     .map(r -> r.getName().name())
                     .findFirst()
                     .orElse("ROLE_USER");
@@ -54,13 +61,45 @@ public class AdminServiceImpl implements AdminService {
         return chatRoomRepository.findAll().stream().map(room -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", room.getId().toString());
-            map.put("name", room.getName() != null ? room.getName() : "Direct Chat");
+
+            List<RoomMember> members = roomMemberRepository.findAllByRoomWithUsersFetched(room);
+            map.put("members", members.size());
+
+            String name = room.getName();
+            if (name == null || name.isBlank()) {
+                if (!members.isEmpty()) {
+                    name = members.stream()
+                        .map(m -> m.getUser().getDisplayName() != null && !m.getUser().getDisplayName().isBlank() ? m.getUser().getDisplayName() : m.getUser().getUsername())
+                        .collect(Collectors.joining(", "));
+                } else {
+                    name = "Direct Chat";
+                }
+            }
+            map.put("name", name);
             map.put("type", room.getType().name());
-            map.put("members", 0); // Simplified for MVP
-            map.put("messages", 0); // Simplified for MVP
-            map.put("updatedAt", room.getUpdatedAt() != null ? room.getUpdatedAt().toString() : "");
+
+            long messagesCount = userActivityRepository.countByActivityTypeAndDetailsContaining(
+                "MESSAGE_SENT", room.getId().toString()
+            );
+            map.put("messages", messagesCount);
+
+            java.util.Optional<UserActivity> lastAct = userActivityRepository.findFirstByActivityTypeAndDetailsContainingOrderByTimestampDesc(
+                "MESSAGE_SENT", room.getId().toString()
+            );
+
+            if (lastAct.isPresent()) {
+                map.put("updatedAt", lastAct.get().getTimestamp().toString());
+            } else {
+                map.put("updatedAt", room.getUpdatedAt() != null ? room.getUpdatedAt().toString() : "");
+            }
+            
             return map;
         }).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<iuh.fit.se.minizalobackend.models.MessageDynamo> getMessagesByRoom(String roomId, int limit) {
+        return messageDynamoRepository.getMessagesByRoomId(roomId, null, limit).getMessages();
     }
 
     @Override

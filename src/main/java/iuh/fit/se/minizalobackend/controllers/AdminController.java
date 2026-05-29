@@ -41,6 +41,14 @@ public class AdminController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/messages/{roomId}")
+    public ResponseEntity<List<iuh.fit.se.minizalobackend.models.MessageDynamo>> getMessagesByRoom(
+            @org.springframework.web.bind.annotation.PathVariable String roomId,
+            @RequestParam(defaultValue = "100") int limit) {
+        return ResponseEntity.ok(adminService.getMessagesByRoom(roomId, limit));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/grant-role")
     public ResponseEntity<?> grantRole(@RequestBody Map<String, String> request) {
         try {
