@@ -28,6 +28,7 @@ public class MessageDynamo {
     private String recalledAt;
     private boolean isPinned;
     private String replyToMessageId;
+    private boolean isPrivacyBlocked;
 
     @DynamoDbPartitionKey
     public String getChatRoomId() {

@@ -25,7 +25,18 @@ public class UserDetailsImpl implements UserDetails {
     @JsonIgnore
     private String password;
 
+    private boolean accountNonLocked;
+
     private Collection<? extends GrantedAuthority> authorities;
+
+    public UserDetailsImpl(
+            UUID id,
+            String username,
+            String email,
+            String password,
+            Collection<? extends GrantedAuthority> authorities) {
+        this(id, username, email, password, true, authorities);
+    }
 
     public static UserDetailsImpl build(User user) {
         List<GrantedAuthority> authorities = user.getRoles().stream()
@@ -37,6 +48,7 @@ public class UserDetailsImpl implements UserDetails {
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
+                !Boolean.TRUE.equals(user.getAccountLocked()),
                 authorities);
     }
 
@@ -62,7 +74,7 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        return accountNonLocked;
     }
 
     @Override

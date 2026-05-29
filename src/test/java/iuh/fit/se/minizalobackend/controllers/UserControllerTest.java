@@ -45,8 +45,11 @@ class UserControllerTest {
     @MockBean
     private UserPresenceService userPresenceService;
 
-    @MockBean
+    @MockBean(name = "internalMinioClient")
     private MinioClient minioClient;
+
+    @MockBean(name = "publicMinioClient")
+    private MinioClient publicMinioClient;
 
     private UserDetailsImpl userDetails;
     private User testUser;
@@ -60,6 +63,7 @@ class UserControllerTest {
                 "testuser",
                 "test@example.com",
                 "password",
+                false,
                 List.of(new SimpleGrantedAuthority("ROLE_USER")));
         testUser = new User();
         testUser.setId(testUserId);

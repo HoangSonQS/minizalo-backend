@@ -23,4 +23,4 @@ COPY --from=builder /app/target/*.jar /app/app.jar
 EXPOSE 8080
 
 # Run the JAR file
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-Dspring.devtools.restart.enabled=false", "-jar", "/app/app.jar"]

@@ -46,8 +46,11 @@ public class ChatControllerTest {
     @MockBean
     private SimpMessagingTemplate simpMessagingTemplate;
 
-    @MockBean
+    @MockBean(name = "internalMinioClient")
     private MinioClient minioClient;
+
+    @MockBean(name = "publicMinioClient")
+    private MinioClient publicMinioClient;
 
     @Test
     @WithMockUser
@@ -83,11 +86,11 @@ public class ChatControllerTest {
         recallRequest.setRoomId(roomId);
         recallRequest.setMessageId(messageId);
 
-        mockMvc.perform(post("/messages/recall")
+        mockMvc.perform(post("/api/messages/recall")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(recallRequest)))
                 .andExpect(status().isOk());
 
-        verify(messageService).recallMessage(roomId, messageId);
+        verify(messageService).recallMessage(roomId, messageId, "user");
     }
 }

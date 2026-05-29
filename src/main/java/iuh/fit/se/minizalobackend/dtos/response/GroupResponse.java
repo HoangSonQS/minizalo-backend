@@ -15,7 +15,11 @@ import java.util.List;
 public class GroupResponse {
     private String id;
     private String groupName;
+    private String avatarUrl;
+    private String wallpaperUrl;
+    private String description;
     private String ownerId;
     private LocalDateTime createdAt;
     private List<GroupMemberResponse> members;
+    private GroupSettingsResponse settings;
 }

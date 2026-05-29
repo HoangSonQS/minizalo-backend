@@ -1,6 +1,7 @@
 package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.payload.request.FriendRequest;
+import iuh.fit.se.minizalobackend.payload.response.AcceptFriendRequestResponse;
 import iuh.fit.se.minizalobackend.payload.response.FriendResponse;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
@@ -31,7 +32,7 @@ public class FriendController {
             @AuthenticationPrincipal UserDetailsImpl userDetails,
             @Valid @RequestBody FriendRequest request) {
         try {
-            FriendResponse response = friendService.sendFriendRequest(userDetails.getId(), request.getFriendId());
+            FriendResponse response = friendService.sendFriendRequest(userDetails.getId(), request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
@@ -44,7 +45,7 @@ public class FriendController {
             @AuthenticationPrincipal UserDetailsImpl userDetails,
             @PathVariable UUID requestId) {
         try {
-            FriendResponse response = friendService.acceptFriendRequest(userDetails.getId(), requestId);
+            AcceptFriendRequestResponse response = friendService.acceptFriendRequest(userDetails.getId(), requestId);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
@@ -86,14 +87,16 @@ public class FriendController {
 
     @GetMapping("/requests")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    public ResponseEntity<List<FriendResponse>> getPendingFriendRequests(@AuthenticationPrincipal UserDetailsImpl userDetails) {
+    public ResponseEntity<List<FriendResponse>> getPendingFriendRequests(
+            @AuthenticationPrincipal UserDetailsImpl userDetails) {
         List<FriendResponse> requests = friendService.getPendingFriendRequests(userDetails.getId());
         return ResponseEntity.ok(requests);
     }
 
     @GetMapping("/requests/sent")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    public ResponseEntity<List<FriendResponse>> getSentFriendRequests(@AuthenticationPrincipal UserDetailsImpl userDetails) {
+    public ResponseEntity<List<FriendResponse>> getSentFriendRequests(
+            @AuthenticationPrincipal UserDetailsImpl userDetails) {
         List<FriendResponse> requests = friendService.getSentFriendRequests(userDetails.getId());
         return ResponseEntity.ok(requests);
     }
@@ -143,5 +146,32 @@ public class FriendController {
             @AuthenticationPrincipal UserDetailsImpl userDetails) {
         List<FriendResponse> blocked = friendService.getBlockedUsers(userDetails.getId());
         return ResponseEntity.ok(blocked);
+    }
+
+    @PutMapping("/{friendId}/timeline-privacy")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> updateTimelinePrivacy(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @PathVariable UUID friendId,
+            @RequestParam(defaultValue = "false") boolean hidden) {
+        try {
+            FriendResponse response = friendService.updateHideMyTimelineFromFriend(userDetails.getId(), friendId, hidden);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @GetMapping("/block-status/{userId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> checkBlockStatus(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @PathVariable UUID userId) {
+        try {
+            java.util.Map<String, Object> status = friendService.checkBlockStatus(userDetails.getId(), userId);
+            return ResponseEntity.ok(status);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
     }
 }

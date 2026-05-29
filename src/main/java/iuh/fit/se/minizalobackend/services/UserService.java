@@ -16,13 +16,18 @@ import java.util.UUID;
 public interface UserService {
     void registerNewUser(SignupRequest signupRequest);
 
+    /** Gọi trước khi gửi OTP đăng ký: chặn SĐT/email đã có tài khoản. */
+    void assertContactAvailableForSignup(String phone, String email);
+
     UserProfileResponse getCurrentUserProfile(UserDetails userDetails);
 
     UserProfileResponse updateProfile(UserDetails userDetails, UserProfileUpdateRequest request);
 
     UserProfileResponse uploadAvatar(UserDetails userDetails, MultipartFile avatarFile) throws IOException;
 
-    List<UserProfileResponse> searchUsers(String query);
+    UserProfileResponse uploadCoverPhoto(UserDetails userDetails, MultipartFile coverFile) throws IOException;
+
+    List<UserProfileResponse> searchUsers(String query, UUID currentUserId);
 
     Optional<User> getUserById(UUID id);
 
@@ -35,4 +40,10 @@ public interface UserService {
     void muteConversation(UUID userId, iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request);
 
     void updateOnlineStatus(UUID userId, boolean isOnline);
+
+    void resetPassword(String phone, String newPassword);
+
+    void lockAccount(UUID userId, String password);
+  
+    List<UserProfileResponse> findUsersByPhoneNumbers(List<String> phoneNumbers, UUID currentUserId);
 }

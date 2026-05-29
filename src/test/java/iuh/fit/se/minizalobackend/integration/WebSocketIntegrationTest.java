@@ -37,8 +37,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-@Import(TestConfig.class)
 public class WebSocketIntegrationTest {
+
+    @MockBean(name = "internalMinioClient")
+    private io.minio.MinioClient minioClient;
+
+    @MockBean(name = "publicMinioClient")
+    private io.minio.MinioClient publicMinioClient;
 
     @LocalServerPort
     private int port;
@@ -67,6 +72,9 @@ public class WebSocketIntegrationTest {
     @MockBean
     private iuh.fit.se.minizalobackend.services.AnalyticsService analyticsService;
 
+    @MockBean
+    private iuh.fit.se.minizalobackend.services.MinioService minioService;
+
     private String URL;
 
     private WebSocketStompClient stompClient;
@@ -86,6 +94,10 @@ public class WebSocketIntegrationTest {
         user.setPassword("password");
 
         org.mockito.Mockito.when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+
+        // Mock ensurePublicUrl to return the input URL (or a predictable public URL)
+        org.mockito.Mockito.when(minioService.ensurePublicUrl(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> "http://localhost:9000/test/" + invocation.getArgument(0));
     }
 
     @Test
@@ -97,8 +109,11 @@ public class WebSocketIntegrationTest {
         String token = jwtTokenProvider.generateAccessToken("7927515e-6531-487d-8153-6591739c9f0b");
         connectHeaders.add("Authorization", "Bearer " + token);
 
+        // CustomHandshakeHandler extracts JWT from query param "token" during handshake
+        String connectUrl = URL + "?token=" + token;
+
         StompSession session = stompClient
-                .connectAsync(URL, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
+                .connectAsync(connectUrl, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
                 })
                 .get(1, TimeUnit.SECONDS);
 
@@ -134,8 +149,11 @@ public class WebSocketIntegrationTest {
         String token = jwtTokenProvider.generateAccessToken("7927515e-6531-487d-8153-6591739c9f0b");
         connectHeaders.add("Authorization", "Bearer " + token);
 
+        // CustomHandshakeHandler extracts JWT from query param "token" during handshake
+        String connectUrl = URL + "?token=" + token;
+
         StompSession session = stompClient
-                .connectAsync(URL, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
+                .connectAsync(connectUrl, (WebSocketHttpHeaders) null, connectHeaders, new StompSessionHandlerAdapter() {
                 })
                 .get(1, TimeUnit.SECONDS);
 
@@ -176,7 +194,7 @@ public class WebSocketIntegrationTest {
         org.junit.jupiter.api.Assertions.assertEquals("IMAGE", receivedMessage.getType());
         org.junit.jupiter.api.Assertions.assertNotNull(receivedMessage.getAttachments());
         org.junit.jupiter.api.Assertions.assertEquals(1, receivedMessage.getAttachments().size());
-        org.junit.jupiter.api.Assertions.assertEquals("/minio/files/test.png",
+        org.junit.jupiter.api.Assertions.assertEquals("http://localhost:9000/test//minio/files/test.png",
                 receivedMessage.getAttachments().get(0).getUrl());
     }
 }

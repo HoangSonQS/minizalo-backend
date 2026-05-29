@@ -30,6 +30,12 @@ public class ChatRoom {
     @Column(length = 2048)
     private String avatarUrl; // For GROUP chats
 
+    @Column(length = 2048)
+    private String wallpaperUrl;
+
+    @Column(length = 1000)
+    private String description;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;

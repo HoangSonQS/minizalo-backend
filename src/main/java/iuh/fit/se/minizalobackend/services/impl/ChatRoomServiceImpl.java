@@ -6,38 +6,122 @@ import iuh.fit.se.minizalobackend.dtos.request.GroupCreationRequest;
 import iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse;
 import iuh.fit.se.minizalobackend.dtos.response.RoomMemberResponse;
 import iuh.fit.se.minizalobackend.dtos.response.UserResponse;
+import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
 import iuh.fit.se.minizalobackend.exception.custom.*;
 import iuh.fit.se.minizalobackend.models.*;
 import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
 import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
+import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.ChatRoomService;
-import iuh.fit.se.minizalobackend.services.UserService;
+import iuh.fit.se.minizalobackend.services.MessageService;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import jakarta.transaction.Transactional;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@Slf4j
 public class ChatRoomServiceImpl implements ChatRoomService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final GroupEventRepository groupEventRepository;
-    private final UserService userService;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final iuh.fit.se.minizalobackend.services.MinioService minioService;
+    private final iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository;
+    private final MessageService messageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public ChatRoomServiceImpl(ChatRoomRepository chatRoomRepository,
             RoomMemberRepository roomMemberRepository,
             GroupEventRepository groupEventRepository,
-            UserService userService,
-            ObjectMapper objectMapper) {
+            UserRepository userRepository,
+            ObjectMapper objectMapper,
+            iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository,
+            iuh.fit.se.minizalobackend.services.MinioService minioService,
+            MessageService messageService,
+            SimpMessagingTemplate messagingTemplate) {
         this.chatRoomRepository = chatRoomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.groupEventRepository = groupEventRepository;
-        this.userService = userService;
+        this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.messageDynamoRepository = messageDynamoRepository;
+        this.minioService = minioService;
+        this.messageService = messageService;
+        this.messagingTemplate = messagingTemplate;
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomResponse initCloudRoom(User user) {
+        if (user == null) throw new IllegalArgumentException("User is required");
+        // Ensure single CLOUD room exists for this user
+        Optional<ChatRoom> existing = chatRoomRepository.findSingleMemberRoom(user.getId(), ERoomType.CLOUD);
+        if (existing.isPresent()) {
+            // Build response
+            return getGroupChatDetails(existing.get().getId());
+        }
+
+        // Backward-compat: if DB already has a CLOUD room (but not single-member), reuse the oldest one.
+        // Avoid creating duplicates.
+        try {
+            final List<ChatRoom> anyCloud = chatRoomRepository.findRoomsByMemberAndType(user.getId(), ERoomType.CLOUD);
+            if (anyCloud != null && !anyCloud.isEmpty()) {
+                ChatRoom pick = anyCloud.stream()
+                        .filter(Objects::nonNull)
+                        .min(Comparator.comparing(ChatRoom::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                        .orElse(anyCloud.get(0));
+                return getGroupChatDetails(pick.getId());
+            }
+        } catch (Exception ignore) {
+            // ignore and create new
+        }
+
+        ChatRoom cloud = chatRoomRepository.save(ChatRoom.builder()
+                .type(ERoomType.CLOUD)
+                .name(null)
+                .avatarUrl(null)
+                .createdBy(user)
+                .build());
+
+        RoomMember member = RoomMember.builder()
+                .room(cloud)
+                .user(user)
+                .role(ERoomRole.MEMBER)
+                .build();
+        roomMemberRepository.save(member);
+
+        ChatRoomResponse response = ChatRoomResponse.builder()
+                .id(cloud.getId())
+                .type(cloud.getType())
+                .name(null)
+                .avatarUrl(null)
+                .createdBy(convertToUserResponse(user))
+                .createdAt(cloud.getCreatedAt())
+                .members(List.of(convertToRoomMemberResponse(member)))
+                .unreadCount(0)
+                .hasInteracted(true)
+                .build();
+        return response;
+    }
+
+    private UserResponse convertToUserResponse(User user) {
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .displayName(user.getDisplayName())
+                .avatarUrl(minioService.ensurePublicUrl(user.getAvatarUrl()))
+                .build();
     }
 
     @Override
@@ -66,7 +150,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .collect(Collectors.toList());
 
         for (UUID memberId : distinctMemberIds) {
-            Optional<User> memberOptional = userService.getUserById(memberId);
+            Optional<User> memberOptional = userRepository.findById(memberId);
             memberOptional.ifPresent(member -> {
                 RoomMember roomMember = RoomMember.builder()
                         .room(chatRoom)
@@ -103,7 +187,9 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .id(chatRoom.getId())
                 .type(chatRoom.getType())
                 .name(chatRoom.getName())
-                .avatarUrl(chatRoom.getAvatarUrl())
+                .avatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()))
+                .wallpaperUrl(minioService.ensurePublicUrl(chatRoom.getWallpaperUrl()))
+                .description(chatRoom.getDescription())
                 .createdBy(convertToUserResponse(createdBy))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
@@ -137,7 +223,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 continue;
             }
 
-            Optional<User> userOptional = userService.getUserById(memberId);
+            Optional<User> userOptional = userRepository.findById(memberId);
             userOptional.ifPresent(user -> {
                 RoomMember newMember = RoomMember.builder()
                         .room(chatRoom)
@@ -336,7 +422,9 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .id(chatRoom.getId())
                 .type(chatRoom.getType())
                 .name(chatRoom.getName())
-                .avatarUrl(chatRoom.getAvatarUrl())
+                .avatarUrl(minioService.ensurePublicUrl(chatRoom.getAvatarUrl()))
+                .wallpaperUrl(minioService.ensurePublicUrl(chatRoom.getWallpaperUrl()))
+                .description(chatRoom.getDescription())
                 .createdBy(convertToUserResponse(chatRoom.getCreatedBy()))
                 .createdAt(chatRoom.getCreatedAt())
                 .members(memberResponses)
@@ -397,14 +485,149 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         return getGroupChatDetails(groupId);
     }
 
-    private UserResponse convertToUserResponse(User user) {
-        return UserResponse.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .displayName(user.getDisplayName())
-                .avatarUrl(user.getAvatarUrl())
+
+
+    @Override
+    @Transactional
+    public ChatRoomResponse createDirectChat(User user1, User user2) {
+        log.info("Creating/checking direct chat between {} and {}", user1.getUsername(), user2.getUsername());
+        Optional<ChatRoom> existingChat = chatRoomRepository.findDirectChatRoom(user1.getId(), user2.getId(), ERoomType.DIRECT);
+        if (existingChat.isPresent()) {
+            log.info("Found existing direct chat: {}", existingChat.get().getId());
+            return getGroupChatDetails(existingChat.get().getId());
+        }
+
+        log.info("Creating new direct chat");
+        ChatRoom chatRoom = ChatRoom.builder()
+                .type(ERoomType.DIRECT)
+                .createdBy(user1)
                 .build();
+        chatRoom = chatRoomRepository.save(chatRoom);
+
+        RoomMember member1 = RoomMember.builder()
+                .room(chatRoom)
+                .user(user1)
+                .role(ERoomRole.MEMBER)
+                .build();
+        RoomMember member2 = RoomMember.builder()
+                .room(chatRoom)
+                .user(user2)
+                .role(ERoomRole.MEMBER)
+                .build();
+        roomMemberRepository.saveAll(List.of(member1, member2));
+        log.info("New direct chat created: {}", chatRoom.getId());
+
+        return getGroupChatDetails(chatRoom.getId());
     }
+
+    @Override
+    @Transactional
+    public List<ChatRoomResponse> getChatRoomsForUser(User user) {
+        log.info("Fetching chat rooms for user ID: {}", user.getId());
+        // Ensure Cloud room exists for older accounts (not created during signup)
+        try {
+            initCloudRoom(user);
+        } catch (Exception e) {
+            log.warn("Failed to ensure cloud room for user {}: {}", user.getId(), e.getMessage());
+        }
+        List<RoomMember> memberships = roomMemberRepository.findByUserId(user.getId());
+        log.info("Found {} memberships for user {}", memberships.size(), user.getUsername());
+        List<ChatRoomResponse> responses = new ArrayList<>();
+
+        for (RoomMember membership : memberships) {
+            try {
+                ChatRoom room = membership.getRoom();
+                if (room == null) {
+                    log.warn("Room is null for membership {}", membership.getId());
+                    continue;
+                }
+                
+                log.info("Getting details for room {}", room.getId());
+                ChatRoomResponse response = getGroupChatDetails(room.getId());
+                log.info("Got details for room {}", room.getId());
+
+                if (room.getType() == ERoomType.DIRECT) {
+                    // Prefer user's saved nickname, fall back to partner's displayName
+                    final String actorNickname = membership.getNickname();
+                    if (actorNickname != null && !actorNickname.isBlank()) {
+                        response.setName(actorNickname);
+                        // Still set avatarUrl from the partner
+                        response.getMembers().stream()
+                            .filter(m -> !m.getUser().getId().equals(user.getId()))
+                            .findFirst()
+                            .ifPresent(otherMember -> response.setAvatarUrl(otherMember.getUser().getAvatarUrl()));
+                    } else {
+                        response.getMembers().stream()
+                            .filter(m -> !m.getUser().getId().equals(user.getId()))
+                            .findFirst()
+                            .ifPresent(otherMember -> {
+                                response.setName(otherMember.getUser().getDisplayName());
+                                response.setAvatarUrl(otherMember.getUser().getAvatarUrl());
+                            });
+                    }
+                }
+
+                // Fetch last message from DynamoDB
+                try {
+                    PaginatedMessageResult lastMsgResult = messageDynamoRepository.getMessagesByRoomId(
+                            room.getId().toString(), null, 1);
+                    if (lastMsgResult != null && lastMsgResult.getMessages() != null 
+                            && !lastMsgResult.getMessages().isEmpty()) {
+                        MessageDynamo lastMsg = lastMsgResult.getMessages().get(0);
+                        // Normalize attachments in last message
+                        if (lastMsg.getAttachments() != null) {
+                            lastMsg.getAttachments().forEach(a -> {
+                                if (a.getUrl() != null) a.setUrl(minioService.ensurePublicUrl(a.getUrl()));
+                                if (a.getThumbnailUrl() != null) a.setThumbnailUrl(minioService.ensurePublicUrl(a.getThumbnailUrl()));
+                            });
+                        }
+                        response.setLastMessage(lastMsg);
+                    }
+                } catch (Exception ex) {
+                    log.warn("Could not fetch last message for room {}: {}", room.getId(), ex.getMessage());
+                }
+
+                // Check if has interacted (sent at least one message)
+                try {
+                    long sentCount = messageDynamoRepository.countMessagesBySender(room.getId().toString(), user.getId().toString());
+                    response.setHasInteracted(sentCount > 0);
+                } catch (Exception ex) {
+                    log.warn("Could not check interaction for room {}: {}", room.getId(), ex.getMessage());
+                }
+
+                // Calculate unread count based on lastReadAt cursor
+                try {
+                    String lastReadAtIso = null;
+                    if (membership.getLastReadAt() != null) {
+                        lastReadAtIso = membership.getLastReadAt().atZone(java.time.ZoneOffset.UTC).toInstant().toString();
+                    }
+                    long unread = messageDynamoRepository.countUnreadMessages(room.getId().toString(), user.getId().toString(), lastReadAtIso);
+                    response.setUnreadCount((int) unread);
+                } catch (Exception ex) {
+                    log.warn("Could not count unread messages for room {}: {}", room.getId(), ex.getMessage());
+                }
+
+                responses.add(response);
+            } catch (Exception e) {
+                log.error("Error processing membership {}: {}", membership.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sorting {} responses", responses.size());
+        responses.sort((r1, r2) -> {
+             // CLOUD luôn ghim trên cùng
+             if (r1.getType() == ERoomType.CLOUD && r2.getType() != ERoomType.CLOUD) return -1;
+             if (r2.getType() == ERoomType.CLOUD && r1.getType() != ERoomType.CLOUD) return 1;
+             String t1 = r1.getLastMessage() != null ? r1.getLastMessage().getCreatedAt() : (r1.getCreatedAt() != null ? r1.getCreatedAt().toString() : "");
+             String t2 = r2.getLastMessage() != null ? r2.getLastMessage().getCreatedAt() : (r2.getCreatedAt() != null ? r2.getCreatedAt().toString() : "");
+             return t2.compareTo(t1);
+        });
+
+        log.info("Returning {} chat rooms for user", responses.size());
+        return responses;
+    }
+
+// Duplicate method removed
 
     private RoomMemberResponse convertToRoomMemberResponse(RoomMember roomMember) {
         return RoomMemberResponse.builder()
@@ -414,5 +637,137 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .joinedAt(roomMember.getJoinedAt())
                 .lastReadAt(roomMember.getLastReadAt())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomResponse saveNickname(UUID roomId, String nickname, User actor) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new ChatRoomNotFoundException("Room with ID " + roomId + " not found."));
+
+        RoomMember membership = roomMemberRepository.findByRoomAndUser(room, actor)
+                .orElseThrow(() -> new UnauthorizedRoomAccessException("You are not a member of this room."));
+
+        // Store empty string as null (clear nickname)
+        membership.setNickname((nickname != null && !nickname.isBlank()) ? nickname.trim() : null);
+        roomMemberRepository.save(membership);
+
+        // Build response with nickname as room name for DIRECT rooms
+        ChatRoomResponse response = getGroupChatDetails(roomId);
+        if (room.getType() == ERoomType.DIRECT) {
+            if (membership.getNickname() != null) {
+                response.setName(membership.getNickname());
+            } else {
+                // Fall back to partner's displayName
+                response.getMembers().stream()
+                        .filter(m -> !m.getUser().getId().equals(actor.getId()))
+                        .findFirst()
+                        .ifPresent(other -> {
+                            response.setName(other.getUser().getDisplayName());
+                            response.setAvatarUrl(other.getUser().getAvatarUrl());
+                        });
+            }
+        }
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomResponse updateWallpaper(UUID roomId, String wallpaperUrl, User actor) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new ChatRoomNotFoundException("Room with ID " + roomId + " not found."));
+
+        RoomMember membership = roomMemberRepository.findByRoomAndUser(room, actor)
+                .orElseThrow(() -> new UnauthorizedRoomAccessException("You are not a member of this room."));
+
+        room.setWallpaperUrl((wallpaperUrl != null && !wallpaperUrl.isBlank()) ? wallpaperUrl.trim() : null);
+        room.setUpdatedAt(LocalDateTime.now());
+        chatRoomRepository.save(room);
+        publishSystemChatMessage(room, actor, displayNameOf(actor) + " đã đổi hình nền cuộc trò chuyện.");
+
+        ChatRoomResponse response = getGroupChatDetails(roomId);
+        if (room.getType() == ERoomType.DIRECT) {
+            if (membership.getNickname() != null) {
+                response.setName(membership.getNickname());
+            } else {
+                response.getMembers().stream()
+                        .filter(m -> !m.getUser().getId().equals(actor.getId()))
+                        .findFirst()
+                        .ifPresent(other -> {
+                            response.setName(other.getUser().getDisplayName());
+                            response.setAvatarUrl(other.getUser().getAvatarUrl());
+                        });
+            }
+        }
+        return response;
+    }
+
+    private String displayNameOf(User user) {
+        if (user == null) return "Ai đó";
+        if (user.getDisplayName() != null && !user.getDisplayName().trim().isEmpty()) {
+            return user.getDisplayName().trim();
+        }
+        if (user.getUsername() != null && !user.getUsername().trim().isEmpty()) {
+            return user.getUsername().trim();
+        }
+        return "Ai đó";
+    }
+
+    private void publishSystemChatMessage(ChatRoom room, User actor, String content) {
+        try {
+            MessageDynamo message = new MessageDynamo();
+            message.setChatRoomId(room.getId().toString());
+            message.setCreatedAt(Instant.now().toString());
+            message.setSenderId("SYSTEM");
+            message.setSenderName(displayNameOf(actor));
+            message.setContent(content);
+            message.setType(AppConstants.MESSAGE_TYPE_SYSTEM);
+            MessageDynamo saved = messageService.saveMessage(message);
+            messagingTemplate.convertAndSend("/topic/chat/" + room.getId(), saved);
+        } catch (Exception ex) {
+            log.warn("Could not publish wallpaper system message for room {}: {}", room.getId(), ex.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteChatRoom(UUID roomId, User actor) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new iuh.fit.se.minizalobackend.exception.custom.ChatRoomNotFoundException(
+                        "Room with ID " + roomId + " not found."));
+
+        // Kiểm tra actor có là thành viên không
+        RoomMember membership = roomMemberRepository.findByRoomAndUser(room, actor)
+                .orElseThrow(() -> new iuh.fit.se.minizalobackend.exception.custom.UnauthorizedRoomAccessException(
+                        "You are not a member of this room."));
+
+        // Xóa toàn bộ tin nhắn trong phòng khỏi DynamoDB
+        try {
+            messageDynamoRepository.deleteAllByRoomId(roomId.toString());
+            log.info("Deleted all messages for room {} by user {}", roomId, actor.getUsername());
+        } catch (Exception ex) {
+            log.warn("Could not delete messages for room {}: {}", roomId, ex.getMessage());
+        }
+
+        if (room.getType() == iuh.fit.se.minizalobackend.models.ERoomType.DIRECT) {
+            // Đối với chat trực tiếp, xóa toàn bộ members và room để reset hoàn toàn
+            List<iuh.fit.se.minizalobackend.models.RoomMember> allMembers = roomMemberRepository.findAllByRoom(room);
+            roomMemberRepository.deleteAll(allMembers);
+            groupEventRepository.deleteAllByGroup(room);
+            chatRoomRepository.delete(room);
+            log.info("Deleted DIRECT room {} completely and removed all its members.", roomId);
+        } else {
+            // Xóa membership của actor đối với nhóm
+            roomMemberRepository.delete(membership);
+            log.info("Removed membership of user {} from room {}", actor.getUsername(), roomId);
+
+            // Nếu không còn thành viên nào → xóa luôn room
+            long remainingMembers = roomMemberRepository.countByRoom(room);
+            if (remainingMembers == 0) {
+                groupEventRepository.deleteAllByGroup(room);
+                chatRoomRepository.delete(room);
+                log.info("Room {} has no more members, deleted room.", roomId);
+            }
+        }
     }
 }

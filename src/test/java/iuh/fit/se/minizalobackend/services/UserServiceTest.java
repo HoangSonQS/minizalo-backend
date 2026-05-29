@@ -6,6 +6,7 @@ import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.request.SignupRequest;
 import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
 import iuh.fit.se.minizalobackend.services.impl.UserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ class UserServiceTest {
     private iuh.fit.se.minizalobackend.repository.GroupRepository groupRepository;
     @Mock
     private iuh.fit.se.minizalobackend.repository.RoomMemberRepository roomMemberRepository;
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
 
     @InjectMocks
     private UserServiceImpl userServiceImpl;
@@ -46,10 +49,12 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Success_UserRole() {
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null);
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null, "valid-token");
 
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
-        when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
+        when(userRepository.existsByPhone(signupRequest.getPhone())).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase(signupRequest.getEmail())).thenReturn(false);
         when(passwordEncoder.encode(signupRequest.getPassword())).thenReturn("encodedPassword");
 
         Role userRole = new Role();
@@ -61,7 +66,8 @@ class UserServiceTest {
         userServiceImpl.registerNewUser(signupRequest);
 
         verify(userRepository, times(1)).existsByUsername("0987654321");
-        verify(userRepository, times(1)).existsByEmail("test@example.com");
+        verify(userRepository, times(1)).existsByPhone("0987654321");
+        verify(userRepository, times(1)).existsByEmailIgnoreCase("test@example.com");
         verify(passwordEncoder, times(1)).encode("password123");
         verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
         verify(userRepository, times(1)).save(any(User.class));
@@ -70,16 +76,18 @@ class UserServiceTest {
     @Test
     void registerNewUser_Failure_UsernameAlreadyExists() {
         SignupRequest signupRequest = new SignupRequest("Existing User", "0987654321", "test@example.com",
-                "password123", null, null);
+                "password123", null, null, "valid-token");
 
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userServiceImpl.registerNewUser(signupRequest));
 
-        assertEquals("Error: Phone number is already registered!", exception.getMessage());
+        assertEquals("Số điện thoại đã được đăng ký", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("0987654321");
         verify(userRepository, never()).existsByEmail(anyString());
+        verify(userRepository, never()).existsByEmailIgnoreCase(anyString());
         verify(passwordEncoder, never()).encode(anyString());
         verify(roleRepository, never()).findByName(any(ERole.class));
         verify(userRepository, never()).save(any(User.class));
@@ -88,17 +96,21 @@ class UserServiceTest {
     @Test
     void registerNewUser_Failure_EmailAlreadyExists() {
         SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "existing@example.com",
-                "password123", null, null);
+                "password123", null, null, "valid-token");
+
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
 
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
-        when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(true);
+        when(userRepository.existsByPhone(signupRequest.getPhone())).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase(signupRequest.getEmail())).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userServiceImpl.registerNewUser(signupRequest));
 
-        assertEquals("Error: Email is already in use!", exception.getMessage());
+        assertEquals("Email đã được sử dụng", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("0987654321");
-        verify(userRepository, times(1)).existsByEmail("existing@example.com");
+        verify(userRepository, times(1)).existsByPhone("0987654321");
+        verify(userRepository, times(1)).existsByEmailIgnoreCase("existing@example.com");
         verify(passwordEncoder, never()).encode(anyString());
         verify(roleRepository, never()).findByName(any(ERole.class));
         verify(userRepository, never()).save(any(User.class));
@@ -106,10 +118,13 @@ class UserServiceTest {
 
     @Test
     void registerNewUser_Failure_RoleNotFound() {
-        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null);
+        SignupRequest signupRequest = new SignupRequest("Test User", "0987654321", "test@example.com", "password123", null, null, "valid-token");
 
+        when(jwtTokenProvider.getPhoneFromVerificationToken("valid-token")).thenReturn("0987654321");
         when(userRepository.existsByUsername(signupRequest.getPhone())).thenReturn(false);
-        when(userRepository.existsByEmail(signupRequest.getEmail())).thenReturn(false);
+        when(userRepository.existsByPhone(signupRequest.getPhone())).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase(signupRequest.getEmail())).thenReturn(false);
+        when(passwordEncoder.encode(signupRequest.getPassword())).thenReturn("encodedPassword");
         when(roleRepository.findByName(ERole.ROLE_USER)).thenReturn(Optional.empty());
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -117,9 +132,9 @@ class UserServiceTest {
 
         assertEquals("Error: User role is not found.", exception.getMessage());
         verify(userRepository, times(1)).existsByUsername("0987654321");
-        verify(userRepository, times(1)).existsByEmail("test@example.com");
+        verify(userRepository, times(1)).existsByPhone("0987654321");
+        verify(userRepository, times(1)).existsByEmailIgnoreCase("test@example.com");
         verify(passwordEncoder, times(1)).encode(anyString());
-        verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
         verify(roleRepository, times(1)).findByName(ERole.ROLE_USER);
         verify(userRepository, never()).save(any(User.class));
     }

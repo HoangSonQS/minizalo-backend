@@ -18,6 +18,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.config.Customizer;
+import org.springframework.http.HttpMethod;
 
 import java.util.Arrays;
 
@@ -64,14 +65,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:3000",
-                "http://localhost:8081",
-                "http://10.0.2.2:8081",
-                "http://localhost:19000",
-                "http://localhost:19006",
-                "http://192.168.1.10:8081"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        // Use patterns so dev machines on LAN (same host, different ports) work reliably.
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "http://10.0.2.2:*",
+                "http://192.168.*:*",
+                "http://172.*:*"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Allow all headers
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -87,13 +88,20 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/api/auth/signin", "/api/auth/signin/**",
                                 "/api/auth/signup", "/api/auth/signup/**",
                                 "/api/auth/refreshtoken", "/api/auth/refreshtoken/**",
-                                "/v3/api-docs/**", "/ws/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
+                                "/api/auth/send-otp", "/api/auth/verify-otp",
+                                "/api/auth/forgot-password/send-otp", "/api/auth/reset-password",
+                                "/api/auth/qr-login/generate", "/api/auth/qr-login/events/**",
+                                "/v3/api-docs/**", "/ws/**", "/ws-raw", "/ws-raw/**",
+                                "/swagger-ui/**", "/swagger-ui.html", "/actuator/**")
                         .permitAll()
+                        .requestMatchers("/api/auth/qr-login/confirm").authenticated()
                         .requestMatchers("/api/auth/logout", "/api/auth/logout/**").authenticated()
+                        .requestMatchers("/api/auth/qr-login/confirm").authenticated()
                         .anyRequest().authenticated());
 
         http.authenticationProvider(authenticationProvider());

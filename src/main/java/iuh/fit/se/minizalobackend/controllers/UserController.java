@@ -1,8 +1,11 @@
 package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.payload.request.UserProfileUpdateRequest;
+import iuh.fit.se.minizalobackend.payload.request.LockAccountRequest;
+import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.payload.response.UserProfileResponse;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
+import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.services.UserPresenceService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import jakarta.validation.Valid;
@@ -25,13 +28,19 @@ public class UserController {
 
     private final UserService userService;
     private final UserPresenceService userPresenceService;
+    private final RefreshTokenService refreshTokenService;
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final List<String> ALLOWED_MIME_TYPES = Arrays.asList("image/jpeg", "image/png", "image/gif");
 
-    public UserController(UserService userService, UserPresenceService userPresenceService) {
+    public UserController(
+            UserService userService,
+            UserPresenceService userPresenceService,
+            RefreshTokenService refreshTokenService
+    ) {
         this.userService = userService;
         this.userPresenceService = userPresenceService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @GetMapping("/me")
@@ -84,11 +93,54 @@ public class UserController {
         }
     }
 
+    @PutMapping("/cover-photo")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> uploadCoverPhoto(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @RequestParam("file") MultipartFile file) {
+
+        if (file.getSize() > MAX_FILE_SIZE) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("Error: File size must not exceed " + (MAX_FILE_SIZE / (1024 * 1024)) + "MB!");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType)) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("Error: Only JPEG, PNG, and GIF image formats are allowed!");
+        }
+
+        try {
+            UserProfileResponse updatedProfile = userService.uploadCoverPhoto(userDetails, file);
+            return ResponseEntity.ok(updatedProfile);
+        } catch (IOException e) {
+            return ResponseEntity
+                    .internalServerError()
+                    .body("Error: Could not upload the cover photo due to an internal server error: " + e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity
+                    .internalServerError()
+                    .body("Error: An unexpected error occurred during cover photo upload: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/search")
     @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
-    public ResponseEntity<List<UserProfileResponse>> searchUsers(@RequestParam String q) {
-        List<UserProfileResponse> users = userService.searchUsers(q);
+    public ResponseEntity<List<UserProfileResponse>> searchUsers(
+            @AuthenticationPrincipal iuh.fit.se.minizalobackend.security.services.UserDetailsImpl userDetails,
+            @RequestParam String q) {
+        List<UserProfileResponse> users = userService.searchUsers(q, userDetails.getId());
         return ResponseEntity.ok(users);
+    }
+
+    @GetMapping("/profile/{userId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<UserProfileResponse> getUserProfile(@PathVariable UUID userId) {
+        return userService.getUserById(userId)
+                .map(user -> ResponseEntity.ok(userService.mapUserToUserProfileResponse(user)))
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping("/fcm-token")
@@ -124,5 +176,29 @@ public class UserController {
             @Valid @RequestBody iuh.fit.se.minizalobackend.dtos.request.MuteConversationRequest request) {
         userService.muteConversation(userDetails.getId(), request);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/lock-account")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<MessageResponse> lockAccount(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @Valid @RequestBody LockAccountRequest request) {
+        userService.lockAccount(userDetails.getId(), request.getPassword());
+        // Revoke all sessions immediately after account lock
+        refreshTokenService.deleteByUserId(userDetails.getId().toString());
+        return ResponseEntity.ok(new MessageResponse("Tài khoản đã được khóa thành công"));
+    }
+  
+    @PostMapping("/sync-contacts")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<List<UserProfileResponse>> syncContacts(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @RequestBody Map<String, List<String>> body) {
+        List<String> phoneNumbers = body.get("phoneNumbers");
+        if (phoneNumbers == null || phoneNumbers.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<UserProfileResponse> matchedUsers = userService.findUsersByPhoneNumbers(phoneNumbers, userDetails.getId());
+        return ResponseEntity.ok(matchedUsers);
     }
 }

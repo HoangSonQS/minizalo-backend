@@ -1,12 +1,15 @@
 package iuh.fit.se.minizalobackend.services;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public interface FriendService {
-    iuh.fit.se.minizalobackend.payload.response.FriendResponse sendFriendRequest(UUID senderId, UUID receiverId);
+    iuh.fit.se.minizalobackend.payload.response.FriendResponse sendFriendRequest(UUID senderId,
+            iuh.fit.se.minizalobackend.payload.request.FriendRequest request);
 
-    iuh.fit.se.minizalobackend.payload.response.FriendResponse acceptFriendRequest(UUID currentUserId, UUID requestId);
+    iuh.fit.se.minizalobackend.payload.response.AcceptFriendRequestResponse acceptFriendRequest(UUID currentUserId,
+            UUID requestId);
 
     void rejectFriendRequest(UUID currentUserId, UUID requestId);
 
@@ -28,4 +31,10 @@ public interface FriendService {
 
     // Danh sách user mà current user đã chặn (BLOCKED)
     List<iuh.fit.se.minizalobackend.payload.response.FriendResponse> getBlockedUsers(UUID userId);
+
+    // Kiểm tra trạng thái chặn giữa hai user
+    iuh.fit.se.minizalobackend.payload.response.FriendResponse updateHideMyTimelineFromFriend(UUID currentUserId,
+            UUID friendId, boolean hidden);
+
+    Map<String, Object> checkBlockStatus(UUID currentUserId, UUID otherUserId);
 }

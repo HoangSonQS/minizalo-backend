@@ -1,5 +1,6 @@
 package iuh.fit.se.minizalobackend.payload.response;
 
+import iuh.fit.se.minizalobackend.models.EPrivacyAudience;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,6 +19,7 @@ public class UserProfileResponse {
     private String email;
     private String displayName;
     private String avatarUrl;
+    private String coverPhotoUrl;
     private String statusMessage;
     private String phone;
     private String gender;
@@ -28,4 +30,9 @@ public class UserProfileResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<String> roles;
+    private Boolean allowPhoneSearch;
+
+    private EPrivacyAudience allowMessagesFrom;
+
+    private EPrivacyAudience allowCallsFrom;
 }

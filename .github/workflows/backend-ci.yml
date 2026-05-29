@@ -2,14 +2,18 @@ name: Backend CI/CD
 
 on:
   push:
-    branches: [ main, dev, feature/* ]
+    branches: [ main, develop, feature/* ]
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main, develop ]
 
 jobs:
-  build:
+  # ============================================================
+  # JOB 1: CI — Build & Test (chạy trên mọi branch và PR)
+  # ============================================================
+  ci:
+    name: Build & Test
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:13
@@ -24,7 +28,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       dynamodb:
         image: amazon/dynamodb-local:latest
         ports:
@@ -46,63 +50,152 @@ jobs:
           --health-retries 5
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
-        cache-dependency-path: 'pom.xml'
+      - name: Set up JDK 17
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+          java -version
 
-    - name: Start Minio Service
-      run: |
-        docker run -d -p 9000:9000 --name minio \
-          -e "MINIO_ROOT_USER=test" \
-          -e "MINIO_ROOT_PASSWORD=testtest" \
-          minio/minio:latest server /data
-        # Wait for Minio to be ready
-        sleep 5
+      - name: Start MinIO Service
+        run: |
+          docker run -d -p 9000:9000 --name minio \
+            -e "MINIO_ROOT_USER=test" \
+            -e "MINIO_ROOT_PASSWORD=testtest" \
+            minio/minio:latest server /data
+          sleep 5
 
-    - name: Create Dummy Firebase Key
-      run: |
-        mkdir -p src/main/resources
-        echo '{}' > src/main/resources/firebase-service-account.json
+      - name: Create Dummy Firebase Credentials
+        run: |
+          mkdir -p src/main/resources
+          echo '{}' > src/main/resources/firebase-service-account.json
 
-    - name: Grant execute permission for mvnw
-      run: chmod +x mvnw
+      - name: Grant execute permission for mvnw
+        run: chmod +x mvnw
 
-    - name: Build with Maven
-      env:
-        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
-        SPRING_DATASOURCE_USERNAME: myuser
-        SPRING_DATASOURCE_PASSWORD: mypassword
-        APP_JWT_SECRET: secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
-        APP_REFRESH_TOKEN_EXPIRATION_DAYS: 7
-        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
-        AWS_ACCESS_KEY_ID: test
-        AWS_SECRET_ACCESS_KEY: test
-        AWS_REGION: us-west-2
-        MINIO_ENDPOINT: http://localhost:9000
-        MINIO_ACCESS_KEY: test
-        MINIO_SECRET_KEY: testtest
-        MINIO_BUCKET_NAME: test
-      run: ./mvnw -B package -DskipTests
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
 
-    - name: Run Tests
-      env:
-        SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
-        SPRING_DATASOURCE_USERNAME: myuser
-        SPRING_DATASOURCE_PASSWORD: mypassword
-        APP_JWT_SECRET: secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
-        APP_REFRESH_TOKEN_EXPIRATION_DAYS: 7
-        AWS_DYNAMODB_ENDPOINT: http://localhost:8000
-        AWS_ACCESS_KEY_ID: test
-        AWS_SECRET_ACCESS_KEY: test
-        AWS_REGION: us-west-2
-        MINIO_ENDPOINT: http://localhost:9000
-        MINIO_ACCESS_KEY: test
-        MINIO_SECRET_KEY: testtest
-        MINIO_BUCKET_NAME: test
-      run: ./mvnw -B test
+      - name: Build with Maven (skip tests)
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/minizalodb
+          SPRING_DATASOURCE_USERNAME: myuser
+          SPRING_DATASOURCE_PASSWORD: mypassword
+          APP_JWT_SECRET: secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
+          APP_REFRESH_TOKEN_EXPIRATION_DAYS: 7
+          AWS_DYNAMODB_ENDPOINT: http://localhost:8000
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_REGION: us-west-2
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: test
+          MINIO_SECRET_KEY: testtest
+          MINIO_BUCKET_NAME: test
+          AGORA_APP_ID: test-agora-app-id
+          AGORA_APP_CERTIFICATE: test-agora-app-certificate
+          GEMINI_API_KEY: test-gemini-key
+        run: ./mvnw -B package -DskipTests
+
+      - name: Wait for services to be ready
+        run: sleep 10
+
+      - name: Create application-test.properties
+        run: |
+          mkdir -p src/test/resources
+          cat > src/test/resources/application-test.properties << 'EOF'
+          spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+          spring.datasource.driverClassName=org.h2.Driver
+          spring.datasource.username=sa
+          spring.datasource.password=
+          spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+          spring.jpa.hibernate.ddl-auto=create-drop
+          spring.jpa.show-sql=false
+          app.jwtSecret=secure-test-secret-secure-test-secret-secure-test-secret-secure-test-secret
+          app.access.token.expiration.minutes=60
+          app.refresh.token.expiration.days=7
+          aws.dynamodb.endpoint=http://localhost:8000
+          aws.accessKeyId=test
+          aws.secretKey=test
+          aws.region=us-west-2
+          minio.endpoint=http://localhost:9000
+          minio.publicUrl=http://localhost:9000
+          minio.accessKey=test
+          minio.secretKey=testtest
+          minio.bucketName=test
+          agora.appId=test-agora-app-id
+          agora.appCertificate=test-agora-app-certificate
+          firebase.service-account.path=firebase-service-account.json
+          logging.level.iuh.fit.se.minizalobackend=DEBUG
+          logging.level.org.springframework.web=INFO
+          EOF
+
+      - name: Run Tests
+        run: ./mvnw -B test
+
+  # ============================================================
+  # JOB 2: CD — Build & Push Docker image lên Docker Hub,
+  #             sau đó SSH vào EC2 để pull image mới và restart
+  #             (Chỉ chạy khi push vào branch main)
+  # ============================================================
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Docker image to Docker Hub
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # Image sẽ được đặt tên: <DOCKERHUB_USERNAME>/minizalo-backend:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/minizalo-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/minizalo-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: SSH into EC2 — Pull new image & Restart container
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          connect_timeout: 30s
+          script: |
+            set -e
+
+            echo "=== [1/3] Pull image mới từ Docker Hub ==="
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/minizalo-backend:latest
+
+            echo "=== [2/3] Cập nhật image trong docker-compose và restart ==="
+            cd ~/minizalo-backend
+            docker compose -f docker-compose.aws.yml up -d --force-recreate
+
+            echo "=== [3/3] Dọn dẹp image cũ ==="
+            docker image prune -f
+
+            echo ""
+            echo "=== Deploy hoàn tất! Log 30 dòng cuối ==="
+            sleep 8
+            docker logs minizalo-backend --tail=30

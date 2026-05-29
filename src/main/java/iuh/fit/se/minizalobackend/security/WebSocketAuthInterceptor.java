@@ -1,6 +1,6 @@
 package iuh.fit.se.minizalobackend.security;
 
-import iuh.fit.se.minizalobackend.services.impl.UserDetailsServiceImpl;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -8,20 +8,23 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
+/**
+ * Validates JWT token on STOMP CONNECT but does NOT override the Principal.
+ * The Principal is set exclusively by {@link CustomHandshakeHandler} during the
+ * HTTP WebSocket handshake to avoid conflicts with Spring's SimpUserRegistry
+ * and user-destination resolution used by convertAndSendToUser().
+ */
 @Component
+@Slf4j
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final UserDetailsServiceImpl userDetailsService;
 
     @Autowired
-    public WebSocketAuthInterceptor(JwtTokenProvider jwtTokenProvider, UserDetailsServiceImpl userDetailsService) {
+    public WebSocketAuthInterceptor(JwtTokenProvider jwtTokenProvider) {
         this.jwtTokenProvider = jwtTokenProvider;
-        this.userDetailsService = userDetailsService;
     }
 
     @Override
@@ -32,13 +35,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             String authHeader = accessor.getFirstNativeHeader("Authorization");
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
-                if (jwtTokenProvider.validateToken(token)) {
-                    String userId = jwtTokenProvider.getUserIdFromAccessToken(token);
-                    UserDetails userDetails = userDetailsService.loadUserById(userId);
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    accessor.setUser(authentication);
+                if (!jwtTokenProvider.validateToken(token)) {
+                    throw new org.springframework.messaging.MessageDeliveryException("Invalid or expired JWT token");
                 }
+                log.debug("=== [WS-Auth] === STOMP CONNECT JWT validated. Principal kept from HandshakeHandler.");
+            } else {
+                throw new org.springframework.messaging.MessageDeliveryException("Missing Authorization header");
             }
         }
         return message;

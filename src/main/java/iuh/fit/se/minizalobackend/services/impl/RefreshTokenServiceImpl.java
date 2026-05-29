@@ -33,26 +33,35 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     @Override
     @Transactional
-    public RefreshToken createRefreshToken(String userId) {
+    public RefreshToken createRefreshToken(String userId, String deviceType, String deviceId, boolean revokeExistingSameType) {
 
         var user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new IllegalArgumentException("Error: User not found with ID: " + userId));
 
-        // Bỏ tham chiếu refresh token cũ trên User (tránh xung đột quan hệ OneToOne)
-        user.setRefreshToken(null);
-        userRepository.saveAndFlush(user);
+        final String normalizedType = (deviceType == null || deviceType.isBlank()) ? "WEB" : deviceType.trim().toUpperCase();
+        final String normalizedDeviceId = (deviceId == null || deviceId.isBlank()) ? "unknown" : deviceId.trim();
 
-        // Xóa refresh token cũ theo user_id (native query) để chắc chắn không còn bản ghi trước khi INSERT
-        refreshTokenRepository.deleteByUserId(user.getId());
-        refreshTokenRepository.flush();
+        // Only delete tokens of the SAME deviceType if revokeExistingSameType is true.
+        // This allows MOBILE and WEB to coexist simultaneously.
+        if (revokeExistingSameType) {
+            refreshTokenRepository.deleteByUserIdAndDeviceType(user.getId(), normalizedType);
+            refreshTokenRepository.flush();
+        }
 
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(user);
         refreshToken.setExpiryDate(Instant.now().plusSeconds(refreshTokenExpirationDays * 24 * 60 * 60));
         refreshToken.setToken(UUID.randomUUID().toString());
+        refreshToken.setDeviceType(normalizedType);
+        refreshToken.setDeviceId(normalizedDeviceId);
 
         refreshToken = refreshTokenRepository.save(refreshToken);
         return refreshToken;
+    }
+
+    // Backward-compatible overload for direct impl calls in existing tests
+    public RefreshToken createRefreshToken(String userId) {
+        return createRefreshToken(userId, "WEB", "unknown", false);
     }
 
     @Override
@@ -69,14 +78,14 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RefreshToken rotateRefreshToken(RefreshToken oldToken) {
-        userRepository.findById(oldToken.getUser().getId()).ifPresent(user -> {
-            user.setRefreshToken(null);
-            userRepository.save(user);
-        });
-
         refreshTokenRepository.deleteById(oldToken.getId());
         refreshTokenRepository.flush();
-        return createRefreshToken(oldToken.getUser().getId().toString());
+        return createRefreshToken(
+                oldToken.getUser().getId().toString(),
+                oldToken.getDeviceType(),
+                oldToken.getDeviceId(),
+                false
+        );
     }
 
     @Override
@@ -86,5 +95,13 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             refreshTokenRepository.deleteByUser(user);
             refreshTokenRepository.flush(); // Ensure deletion is committed
         });
+    }
+
+    @Override
+    @Transactional
+    public void deleteByToken(String token) {
+        if (token == null || token.isBlank()) return;
+        refreshTokenRepository.deleteByToken(token);
+        refreshTokenRepository.flush();
     }
 }
