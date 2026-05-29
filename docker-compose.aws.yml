@@ -78,7 +78,7 @@ services:
     restart: unless-stopped
 
   minizalo-backend:
-    image: hoangsonqs/minizalo-backend:latest
+    image: ${DOCKERHUB_USERNAME}/minizalo-backend:latest
     container_name: minizalo-backend
     ports:
       - "8080:8080"

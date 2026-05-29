@@ -200,7 +200,7 @@ jobs:
 
             echo "=== [2/3] Cập nhật image trong docker-compose và restart ==="
             cd ~/minizalo-backend
-            docker compose -f docker-compose.aws.yml up -d --force-recreate
+            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }} docker compose -f docker-compose.aws.yml up -d --force-recreate
 
             echo "=== [3/3] Dọn dẹp image cũ ==="
             docker image prune -f
