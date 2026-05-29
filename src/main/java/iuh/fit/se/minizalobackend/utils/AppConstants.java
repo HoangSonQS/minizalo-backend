@@ -15,6 +15,7 @@ public class AppConstants {
 
     public static final String ACTIVITY_MESSAGE_SENT = "MESSAGE_SENT";
     public static final String ACTIVITY_MESSAGE_FORWARDED = "MESSAGE_FORWARDED";
+    public static final String ACTIVITY_USER_LOGIN = "USER_LOGIN";
 
     public static final String ROLE_USER = "ROLE_USER";
     public static final String ROLE_ADMIN = "ROLE_ADMIN";
