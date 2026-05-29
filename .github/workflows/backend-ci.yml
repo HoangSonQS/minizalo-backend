@@ -181,7 +181,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
-          source: "docker-compose.aws.yml"
+          source: "docker-compose.aws.yml,nginx/"
           target: "/home/ubuntu/minizalo-backend/"
 
       - name: SSH into EC2 — Pull new image & Restart container
