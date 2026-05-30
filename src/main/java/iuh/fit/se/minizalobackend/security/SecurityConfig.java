@@ -73,7 +73,9 @@ public class SecurityConfig {
                 "http://192.168.*:*",
                 "http://172.*:*",
                 "https://minizalo-frontend.vercel.app",
-                "https://minizalo-frontend-*.vercel.app"));
+                "https://minizalo-frontend-*.vercel.app",
+                "https://minizalo.click",
+                "https://*.minizalo.click"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Allow all headers
         configuration.setAllowCredentials(true);
