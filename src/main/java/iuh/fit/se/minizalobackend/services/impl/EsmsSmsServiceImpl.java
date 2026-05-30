@@ -28,7 +28,7 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 public class EsmsSmsServiceImpl implements SmsService {
 
-    private static final String ESMS_API_URL = "https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_get/";
+    private static final String ESMS_API_URL = "https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_post_json/";
 
     @Value("${esms.api.key:}")
     private String apiKey;
