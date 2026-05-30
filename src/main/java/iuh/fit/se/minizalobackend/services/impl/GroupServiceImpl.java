@@ -99,6 +99,27 @@ public class GroupServiceImpl implements GroupService {
     @Override
     @Transactional
     public GroupResponse createGroup(CreateGroupRequest request, User creator) {
+        // Validate minimum 3 members (including creator, so at least 2 other members)
+        List<String> initialMemberIds = request.getInitialMemberIds();
+        long uniqueOtherMembersCount = 0;
+        if (initialMemberIds != null) {
+            uniqueOtherMembersCount = initialMemberIds.stream()
+                    .filter(id -> id != null && !id.trim().isEmpty())
+                    .map(id -> {
+                        try {
+                            return UUID.fromString(id.trim());
+                        } catch (IllegalArgumentException e) {
+                            return null;
+                        }
+                    })
+                    .filter(uid -> uid != null && !uid.equals(creator.getId()))
+                    .distinct()
+                    .count();
+        }
+        if (uniqueOtherMembersCount < 2) {
+            throw new IllegalArgumentException("Một nhóm phải có ít nhất 3 thành viên (bao gồm cả bạn). Vui lòng chọn thêm thành viên.");
+        }
+
         // 1. Create the ChatRoom (Group)
         ChatRoom groupChatRoom = ChatRoom.builder()
                 .type(ERoomType.GROUP)
