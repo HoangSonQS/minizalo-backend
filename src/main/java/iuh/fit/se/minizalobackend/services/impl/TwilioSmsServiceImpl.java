@@ -26,7 +26,6 @@ import java.util.Base64;
  * Nếu chưa cấu hình (để trống), SMS sẽ bị BỎ QUA và OTP chỉ được log ra console.
  * Điều này giúp môi trường local dev vẫn chạy được mà không cần Twilio thật.
  */
-@Service
 @Slf4j
 public class TwilioSmsServiceImpl implements SmsService {
 
