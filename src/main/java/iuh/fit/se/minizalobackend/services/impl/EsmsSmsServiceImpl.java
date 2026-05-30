@@ -97,7 +97,7 @@ public class EsmsSmsServiceImpl implements SmsService {
                 "\"Content\":\"%s\"," +
                 "\"Phone\":\"%s\"," +
                 "\"SecretKey\":\"%s\"," +
-                "\"SmsType\":\"4\"," +
+                "\"SmsType\":\"8\"," +
                 "\"IsUnicode\":\"0\"," +
                 "\"Sandbox\":\"0\"" +
                 "}",
