@@ -19,6 +19,7 @@ import iuh.fit.se.minizalobackend.services.OtpService;
 import iuh.fit.se.minizalobackend.services.QrLoginService;
 import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
+import iuh.fit.se.minizalobackend.services.SmsService;
 import iuh.fit.se.minizalobackend.services.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -42,17 +43,19 @@ public class AuthController {
     private final UserService userService;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final SmsService smsService;
     private final QrLoginService qrLoginService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
             RefreshTokenService refreshTokenService, UserService userService, OtpService otpService,
-            EmailService emailService, QrLoginService qrLoginService) {
+            EmailService emailService, SmsService smsService, QrLoginService qrLoginService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
         this.userService = userService;
         this.otpService = otpService;
         this.emailService = emailService;
+        this.smsService = smsService;
         this.qrLoginService = qrLoginService;
     }
 
@@ -144,6 +147,13 @@ public class AuthController {
                         .body(new MessageResponse("Email là bắt buộc khi chọn kênh EMAIL"));
             }
             emailService.sendOtpEmail(request.getEmail(), otp);
+        } else {
+            // Kênh SMS: gửi OTP về số điện thoại qua Twilio
+            if (request.getPhone() == null || request.getPhone().isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Số điện thoại là bắt buộc khi chọn kênh SMS"));
+            }
+            smsService.sendOtpSms(request.getPhone(), otp);
         }
 
         return ResponseEntity.ok(new MessageResponse("OTP sent successfully!"));
@@ -170,6 +180,13 @@ public class AuthController {
                         .body(new MessageResponse("Email là bắt buộc khi chọn kênh EMAIL"));
             }
             emailService.sendOtpEmail(request.getEmail(), otp);
+        } else {
+            // Kênh SMS: gửi OTP về số điện thoại qua Twilio
+            if (request.getPhone() == null || request.getPhone().isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Số điện thoại là bắt buộc khi chọn kênh SMS"));
+            }
+            smsService.sendOtpSms(request.getPhone(), otp);
         }
 
         return ResponseEntity.ok(new MessageResponse("OTP sent successfully!"));
