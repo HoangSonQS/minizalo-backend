@@ -130,6 +130,30 @@ public class DbStartupMigrations {
             } catch (Exception e) {
                 log.warn("[DB-MIGRATION] Skip ensuring social post interaction tables: {}", e.getMessage());
             }
+
+            // 5) Remove unique constraints on refresh_tokens.user_id to support concurrent WEB and MOBILE sessions.
+            try {
+                jdbc.execute("ALTER TABLE refresh_tokens DROP CONSTRAINT IF EXISTS uk_7tdcd6ab5wsgoudnvj7xf1b7l");
+                
+                java.util.List<String> constraints = jdbc.queryForList(
+                        "SELECT tc.constraint_name " +
+                        "FROM information_schema.table_constraints AS tc " +
+                        "JOIN information_schema.key_column_usage AS kcu " +
+                        "  ON tc.constraint_name = kcu.constraint_name " +
+                        "  AND tc.table_schema = kcu.table_schema " +
+                        "WHERE tc.constraint_type = 'UNIQUE' " +
+                        "  AND tc.table_name = 'refresh_tokens' " +
+                        "  AND kcu.column_name = 'user_id'",
+                        String.class
+                );
+                for (String constraint : constraints) {
+                    jdbc.execute("ALTER TABLE refresh_tokens DROP CONSTRAINT IF EXISTS " + constraint);
+                    log.info("[DB-MIGRATION] Dropped unique constraint: {} from refresh_tokens(user_id)", constraint);
+                }
+                log.info("[DB-MIGRATION] Cleaned up unique constraints on refresh_tokens(user_id)");
+            } catch (Exception e) {
+                log.warn("[DB-MIGRATION] Skip cleaning up unique constraints on refresh_tokens: {}", e.getMessage());
+            }
         };
     }
 }

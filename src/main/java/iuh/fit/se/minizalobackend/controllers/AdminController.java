@@ -340,12 +340,19 @@ public class AdminController {
     @PostMapping("/moderation/{id}/action")
     public ResponseEntity<?> handleModerationAction(
             @org.springframework.web.bind.annotation.PathVariable Long id,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            HttpServletRequest servletRequest) {
         String action = request.get("action"); // APPROVE or DELETE
         return moderationFlagRepository.findById(id).map(flag -> {
             if ("DELETE".equalsIgnoreCase(action)) {
                 flag.setStatus("DELETED");
-                // TBD: Thực tế sẽ gọi MessageService.deleteMessage(messageId)
+                if (flag.getRoomId() != null && flag.getMessageId() != null) {
+                    try {
+                        adminService.deleteMessage(flag.getRoomId(), flag.getMessageId(), getClientIp(servletRequest), servletRequest.getHeader("User-Agent"));
+                    } catch (Exception e) {
+                        System.err.println("Failed to delete flagged message: " + e.getMessage());
+                    }
+                }
             } else {
                 flag.setStatus("APPROVED");
             }
