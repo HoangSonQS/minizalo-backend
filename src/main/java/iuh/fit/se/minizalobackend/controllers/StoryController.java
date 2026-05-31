@@ -2,7 +2,9 @@ package iuh.fit.se.minizalobackend.controllers;
 
 import iuh.fit.se.minizalobackend.dtos.response.StoryResponse;
 import iuh.fit.se.minizalobackend.models.User;
+import iuh.fit.se.minizalobackend.models.ModerationFlag;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
+import iuh.fit.se.minizalobackend.repository.ModerationFlagRepository;
 import iuh.fit.se.minizalobackend.services.StoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -27,6 +29,7 @@ public class StoryController {
 
     private final StoryService storyService;
     private final UserRepository userRepository;
+    private final ModerationFlagRepository moderationFlagRepository;
 
     @PostMapping(value = "", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Create a new story")
@@ -93,6 +96,39 @@ public class StoryController {
         User user = getCurrentUser();
         storyService.viewStory(user, userId, createdAt);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/report")
+    @Operation(summary = "Report a story")
+    public ResponseEntity<?> reportStory(@org.springframework.web.bind.annotation.RequestBody java.util.Map<String, String> body) {
+        User reporter = getCurrentUser();
+        String storyUserId = body.get("storyUserId");
+        String storyId = body.get("storyId"); // createdAt value
+        String reason = body.get("reason");
+        String previewContent = body.get("content"); // optional caption
+
+        if (storyUserId == null || storyId == null) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", "Thiếu thông tin story"));
+        }
+
+        // Prevent duplicate reports
+        boolean alreadyReported = moderationFlagRepository
+            .existsByTargetIdAndReporterIdAndStatus(storyId, reporter.getId().toString(), "PENDING");
+        if (alreadyReported) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", "Bạn đã báo cáo story này rồi"));
+        }
+
+        ModerationFlag flag = new ModerationFlag();
+        flag.setTargetType("STORY");
+        flag.setTargetId(storyId);
+        flag.setSenderId(storyUserId); // story owner
+        flag.setReporterId(reporter.getId().toString());
+        flag.setContent(previewContent != null ? previewContent : "Story đa phương tiện");
+        flag.setReason(reason != null ? reason : "INAPPROPRIATE");
+        flag.setStatus("PENDING");
+        moderationFlagRepository.save(flag);
+
+        return ResponseEntity.ok(java.util.Map.of("message", "Đã gửi báo cáo. Chúng tôi sẽ kiểm tra sớm nhất có thể."));
     }
 
     private User getCurrentUser() {

@@ -20,6 +20,7 @@ import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.NotificationService;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.services.AnalyticsService;
+import iuh.fit.se.minizalobackend.services.ModerationService;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.utils.AppConstants;
 import iuh.fit.se.minizalobackend.models.User;
@@ -54,6 +55,7 @@ public class MessageServiceImpl implements MessageService {
     private final AnalyticsService analyticsService;
     private final UserRepository userRepository;
     private final iuh.fit.se.minizalobackend.services.MinioService minioService;
+    private final ModerationService moderationService;
 
     @Override
     public void deleteAllMessages(String chatRoomId) {
@@ -236,10 +238,25 @@ public class MessageServiceImpl implements MessageService {
         log.debug("Saving message to DynamoDB for chat room: {}", message.getChatRoomId());
         messageDynamoRepository.save(message);
 
+        // Async AI Moderation for GROUP and CLOUD rooms
+        if (message.getType() != null && "TEXT".equalsIgnoreCase(message.getType())) {
+            chatRoomRepository.findById(UUID.fromString(message.getChatRoomId())).ifPresent(room -> {
+                if (room.getType() == ERoomType.GROUP || room.getType() == ERoomType.CLOUD) {
+                    moderationService.scanAndFlagMessage(message.getMessageId(), message.getChatRoomId(), message.getSenderId(), message.getContent());
+                }
+            });
+        }
+
         // Log activity (skip for SYSTEM messages)
         if (!"SYSTEM".equals(message.getSenderId())) {
             analyticsService.logActivity(UUID.fromString(message.getSenderId()), AppConstants.ACTIVITY_MESSAGE_SENT,
                     "Message sent to room: " + message.getChatRoomId());
+            // Broadcast live event to admin dashboard
+            try {
+                messagingTemplate.convertAndSend("/topic/admin/live", java.util.Map.of("type", "MESSAGE_SENT"));
+            } catch (Exception e) {
+                log.warn("Failed to broadcast to /topic/admin/live: {}", e.getMessage());
+            }
         }
 
         // Trigger notifications for offline members (skip for SYSTEM/privacy-blocked
