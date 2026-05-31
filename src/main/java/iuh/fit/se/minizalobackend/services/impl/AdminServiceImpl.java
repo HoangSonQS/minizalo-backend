@@ -21,17 +21,10 @@ import iuh.fit.se.minizalobackend.repository.RoleRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserActivityRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
-import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
-import iuh.fit.se.minizalobackend.repository.MessageDynamoRepository;
-import iuh.fit.se.minizalobackend.models.RoomMember;
-import iuh.fit.se.minizalobackend.models.MessageDynamo;
-import iuh.fit.se.minizalobackend.models.ERoomType;
-import iuh.fit.se.minizalobackend.services.AdminService;
-import iuh.fit.se.minizalobackend.services.MessageService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.AdminService;
-import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import iuh.fit.se.minizalobackend.services.MessageService;
+import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import iuh.fit.se.minizalobackend.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -70,7 +63,6 @@ public class AdminServiceImpl implements AdminService {
     private final ContentReportRepository contentReportRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AnalyticsService analyticsService;
-    private final MessageService messageService;
     private final GroupRoomCleanupService groupRoomCleanupService;
 
     @Override
@@ -474,6 +466,9 @@ public class AdminServiceImpl implements AdminService {
                 messageService.saveMessage(msg);
             }
         }
+    }
+
+    @Override
     public Map<String, Object> revokeAdminRole(UUID userId, String ipAddress, String userAgent) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));

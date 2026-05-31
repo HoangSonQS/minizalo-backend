@@ -7,11 +7,6 @@ import java.util.Map;
 import java.util.UUID;
 
 public interface AdminService {
-    List<Map<String, Object>> getAllUsers();
-    List<Map<String, Object>> getAllRooms();
-    List<Map<String, Object>> getAuditLogs(int limit);
-    Map<String, Object> grantRole(String phone, String roleName);
-    List<iuh.fit.se.minizalobackend.models.MessageDynamo> getMessagesByRoom(String roomId, int limit);
     void broadcastMessage(String content);
 
     Map<String, Object> getDashboardSummary();

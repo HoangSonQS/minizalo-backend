@@ -414,6 +414,8 @@ public class AdminController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
+    }
+
     // ── Analytics ──
 
     @PreAuthorize("hasRole('ADMIN')")

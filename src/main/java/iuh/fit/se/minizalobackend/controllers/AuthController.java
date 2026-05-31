@@ -54,12 +54,8 @@ public class AuthController {
 
     public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
             RefreshTokenService refreshTokenService, UserService userService, OtpService otpService,
-<<<<<<< HEAD
-            EmailService emailService, SmsService smsService, QrLoginService qrLoginService) {
-=======
-            EmailService emailService, QrLoginService qrLoginService, SimpMessagingTemplate messagingTemplate,
-            AnalyticsService analyticsService) {
->>>>>>> d0eaeac557d56cb5cc0675d6af3cffff84360246
+            EmailService emailService, SmsService smsService, QrLoginService qrLoginService,
+            SimpMessagingTemplate messagingTemplate, AnalyticsService analyticsService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
