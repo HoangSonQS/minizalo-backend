@@ -14,6 +14,8 @@ import iuh.fit.se.minizalobackend.payload.response.JwtResponse;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.payload.response.TokenRefreshResponse;
 import iuh.fit.se.minizalobackend.security.JwtTokenProvider;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import iuh.fit.se.minizalobackend.services.EmailService;
 import iuh.fit.se.minizalobackend.services.OtpService;
 import iuh.fit.se.minizalobackend.services.QrLoginService;
@@ -21,6 +23,8 @@ import iuh.fit.se.minizalobackend.services.RefreshTokenService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.SmsService;
 import iuh.fit.se.minizalobackend.services.UserService;
+import iuh.fit.se.minizalobackend.services.AnalyticsService;
+import iuh.fit.se.minizalobackend.utils.AppConstants;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -45,10 +49,13 @@ public class AuthController {
     private final EmailService emailService;
     private final SmsService smsService;
     private final QrLoginService qrLoginService;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final AnalyticsService analyticsService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
             RefreshTokenService refreshTokenService, UserService userService, OtpService otpService,
-            EmailService emailService, SmsService smsService, QrLoginService qrLoginService) {
+            EmailService emailService, SmsService smsService, QrLoginService qrLoginService,
+            SimpMessagingTemplate messagingTemplate, AnalyticsService analyticsService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenService = refreshTokenService;
@@ -57,6 +64,8 @@ public class AuthController {
         this.emailService = emailService;
         this.smsService = smsService;
         this.qrLoginService = qrLoginService;
+        this.messagingTemplate = messagingTemplate;
+        this.analyticsService = analyticsService;
     }
 
     @PostMapping("/signin")
@@ -70,12 +79,22 @@ public class AuthController {
         // Update online status
         userService.updateOnlineStatus(userDetails.getId(), true);
 
+        // Broadcast live event to admin dashboard
+        try {
+            messagingTemplate.convertAndSend("/topic/admin/live", Map.of("type", "USER_LOGIN"));
+        } catch (Exception e) {
+            // ignore
+        }
+
         String deviceType = (loginRequest.getDeviceType() == null || loginRequest.getDeviceType().isBlank())
                 ? "WEB"
                 : loginRequest.getDeviceType().trim().toUpperCase();
         String deviceId = (loginRequest.getDeviceId() == null || loginRequest.getDeviceId().isBlank())
                 ? "unknown"
                 : loginRequest.getDeviceId().trim();
+
+        // Log analytics activity
+        analyticsService.logActivity(userDetails.getId(), AppConstants.ACTIVITY_USER_LOGIN, "User logged in from " + deviceType);
 
         // Enforce: only 1 session per deviceType (WEB or MOBILE).
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(
@@ -241,5 +260,24 @@ public class AuthController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
         }
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/impersonate/{userId}")
+    public ResponseEntity<?> impersonateUser(@PathVariable String userId) {
+        return userService.getUserById(java.util.UUID.fromString(userId)).map(user -> {
+            String deviceType = "WEB";
+            String deviceId = "admin-impersonation-" + java.util.UUID.randomUUID().toString();
+            
+            RefreshToken refreshToken = refreshTokenService.createRefreshToken(
+                    user.getId().toString(),
+                    deviceType,
+                    deviceId,
+                    true
+            );
+            String jwt = jwtTokenProvider.generateAccessToken(user.getId().toString(), refreshToken.getToken(), deviceType);
+
+            return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken()));
+        }).orElse(ResponseEntity.notFound().build());
     }
 }

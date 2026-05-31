@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public interface AdminService {
+    void broadcastMessage(String content);
 
     Map<String, Object> getDashboardSummary();
 

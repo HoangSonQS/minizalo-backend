@@ -23,8 +23,8 @@ import iuh.fit.se.minizalobackend.repository.UserActivityRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.services.AdminService;
-import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import iuh.fit.se.minizalobackend.services.MessageService;
+import iuh.fit.se.minizalobackend.services.AnalyticsService;
 import iuh.fit.se.minizalobackend.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -58,11 +58,11 @@ public class AdminServiceImpl implements AdminService {
     private final RoleRepository roleRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final MessageDynamoRepository messageDynamoRepository;
+    private final MessageService messageService;
     private final AdminAuditLogRepository adminAuditLogRepository;
     private final ContentReportRepository contentReportRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AnalyticsService analyticsService;
-    private final MessageService messageService;
     private final GroupRoomCleanupService groupRoomCleanupService;
 
     @Override
@@ -448,6 +448,24 @@ public class AdminServiceImpl implements AdminService {
         response.put("success", true);
         response.put("message", "Đã cấp quyền " + roleName + " cho SĐT " + phone);
         return response;
+    }
+
+    @Override
+    public void broadcastMessage(String content) {
+        List<ChatRoom> rooms = chatRoomRepository.findAll();
+        for (ChatRoom room : rooms) {
+            if (room.getType() == ERoomType.GROUP || room.getType() == ERoomType.CLOUD) {
+                MessageDynamo msg = new MessageDynamo();
+                msg.setMessageId(java.util.UUID.randomUUID().toString());
+                msg.setChatRoomId(room.getId().toString());
+                msg.setSenderId("SYSTEM");
+                msg.setSenderName("Hệ thống MiniZalo");
+                msg.setContent(content);
+                msg.setType("TEXT");
+                msg.setCreatedAt(java.time.Instant.now().toString());
+                messageService.saveMessage(msg);
+            }
+        }
     }
 
     @Override
