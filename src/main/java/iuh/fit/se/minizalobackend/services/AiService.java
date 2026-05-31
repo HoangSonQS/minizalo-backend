@@ -5,7 +5,9 @@ import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.repository.ChatSummaryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,6 +28,10 @@ import java.util.stream.Collectors;
 public class AiService {
 
     private final ChatSummaryRepository chatSummaryRepository;
+
+    @Lazy
+    @Autowired
+    private SystemConfigService systemConfigService;
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
     private String geminiApiKey1;
@@ -409,5 +415,46 @@ public class AiService {
             }
         }
         return "";
+    }
+
+    public boolean isToxicMessage(String text) {
+        // Check if moderation is enabled
+        if (systemConfigService != null && !systemConfigService.isEnabled(SystemConfigService.KEY_AI_MODERATION_ENABLED)) {
+            return false;
+        }
+
+        // Fast path: keyword blocklist check (no AI cost)
+        if (systemConfigService != null) {
+            String keywords = systemConfigService.getValue(SystemConfigService.KEY_AI_MODERATION_KEYWORDS, "");
+            if (!keywords.isBlank()) {
+                String textLower = text.toLowerCase();
+                for (String kw : keywords.split(",")) {
+                    String trimmed = kw.trim().toLowerCase();
+                    if (!trimmed.isEmpty() && textLower.contains(trimmed)) {
+                        log.info("Keyword blocklist matched '{}' in message", trimmed);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // AI inference with dynamic prompt
+        String basePrompt = systemConfigService != null
+                ? systemConfigService.getValue(SystemConfigService.KEY_AI_MODERATION_PROMPT,
+                    "Bạn là hệ thống kiểm duyệt tự động. Hãy kiểm tra đoạn tin nhắn sau xem có chứa ngôn từ độc hại, chửi bậy, lăng mạ, lừa đảo, đa cấp, khiêu dâm, hoặc vi phạm tiêu chuẩn cộng đồng không.\nChỉ trả lời chính xác bằng một từ 'YES' (nếu vi phạm) hoặc 'NO' (nếu an toàn), không giải thích thêm.\n\nTin nhắn:\n")
+                : "Bạn là hệ thống kiểm duyệt tự động. Hãy kiểm tra đoạn tin nhắn sau xem có chứa ngôn từ độc hại, chửi bậy, lăng mạ, lừa đảo, đa cấp, khiêu dâm, hoặc vi phạm tiêu chuẩn cộng đồng không.\nChỉ trả lời chính xác bằng một từ 'YES' (nếu vi phạm) hoặc 'NO' (nếu an toàn), không giải thích thêm.\n\nTin nhắn:\n";
+
+        String sensitivity = systemConfigService != null
+                ? systemConfigService.getValue(SystemConfigService.KEY_AI_MODERATION_SENSITIVITY, "MEDIUM")
+                : "MEDIUM";
+        if ("HIGH".equalsIgnoreCase(sensitivity)) {
+            basePrompt += "[Chế độ nhạy cảm CAO: Flag ngay cả khi chỉ ngầm có dấu hiệu vi phạm]\n";
+        } else if ("LOW".equalsIgnoreCase(sensitivity)) {
+            basePrompt += "[Chế độ nhạy cảm THẤP: Chỉ flag khi nội dung rõ ràng vi phạm]\n";
+        }
+
+        String prompt = basePrompt + text;
+        String result = callGemini(prompt, false);
+        return result != null && result.trim().toUpperCase().contains("YES");
     }
 }

@@ -22,6 +22,9 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     private final UserActivityRepository activityRepository;
     private final UserRepository userRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.messaging.simp.user.SimpUserRegistry simpUserRegistry;
+
     @Override
     @Transactional
     public void logActivity(UUID userId, String activityType, String details) {
@@ -67,7 +70,9 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         List<Object[]> dailyActiveData = activityRepository.countActiveUsersPerDay(since);
         
         long currentActive = 0;
-        if (!dailyActiveData.isEmpty()) {
+        if (simpUserRegistry != null) {
+            currentActive = simpUserRegistry.getUserCount();
+        } else if (!dailyActiveData.isEmpty()) {
             currentActive = ((Number) dailyActiveData.get(dailyActiveData.size() - 1)[1]).longValue();
         }
         
