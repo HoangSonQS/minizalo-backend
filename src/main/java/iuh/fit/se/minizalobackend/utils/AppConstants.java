@@ -17,6 +17,15 @@ public class AppConstants {
     public static final String ACTIVITY_MESSAGE_FORWARDED = "MESSAGE_FORWARDED";
     public static final String ACTIVITY_USER_LOGIN = "USER_LOGIN";
 
+    public static final String ACTIVITY_ADMIN_USER_LOCKED = "ADMIN_USER_LOCKED";
+    public static final String ACTIVITY_ADMIN_USER_UNLOCKED = "ADMIN_USER_UNLOCKED";
+    public static final String ACTIVITY_ADMIN_ROLE_GRANTED = "ADMIN_ROLE_GRANTED";
+    public static final String ACTIVITY_ADMIN_ROLE_REVOKED = "ADMIN_ROLE_REVOKED";
+    public static final String ACTIVITY_ADMIN_MESSAGE_DELETED = "ADMIN_MESSAGE_DELETED";
+    public static final String ACTIVITY_ADMIN_MESSAGE_HIDDEN = "ADMIN_MESSAGE_HIDDEN";
+    public static final String ACTIVITY_ADMIN_GROUP_DISBANDED = "ADMIN_GROUP_DISBANDED";
+    public static final String ACTIVITY_ADMIN_REPORT_RESOLVED = "ADMIN_REPORT_RESOLVED";
+
     public static final String ROLE_USER = "ROLE_USER";
     public static final String ROLE_ADMIN = "ROLE_ADMIN";
 

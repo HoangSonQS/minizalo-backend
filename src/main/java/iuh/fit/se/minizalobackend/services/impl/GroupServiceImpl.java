@@ -53,6 +53,7 @@ public class GroupServiceImpl implements GroupService {
     private final GroupEventRepository groupEventRepository;
     private final GroupSettingsRepository groupSettingsRepository;
     private final BlockedGroupMemberRepository blockedGroupMemberRepository;
+    private final GroupRoomCleanupService groupRoomCleanupService;
     private final MessageService messageService;
     private final ModelMapper modelMapper;
     private final SimpMessagingTemplate messagingTemplate;
@@ -684,13 +685,7 @@ public class GroupServiceImpl implements GroupService {
             log.warn("Failed to broadcast room REMOVED on chat topic: {}", e.getMessage());
         }
 
-        // Xóa các bảng phụ trước để tránh lỗi FK constraint (vd: blocked_group_members → chat_rooms)
-        messageService.deleteAllMessages(groupChatRoom.getId().toString());
-        blockedGroupMemberRepository.deleteAll(blockedGroupMemberRepository.findByGroup(groupChatRoom));
-        groupSettingsRepository.findByGroupId(groupId).ifPresent(groupSettingsRepository::delete);
-        roomMemberRepository.deleteAll(roomMemberRepository.findAllByRoom(groupChatRoom));
-        groupEventRepository.deleteAll(groupEventRepository.findByGroupIdOrderByCreatedAtDesc(groupId));
-        groupRepository.delete(groupChatRoom);
+        groupRoomCleanupService.hardDeleteGroup(groupChatRoom);
 
         // Push ROOM_REMOVED to all members (realtime remove from chat list)
         try {
