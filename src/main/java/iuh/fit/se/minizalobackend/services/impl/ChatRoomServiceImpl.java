@@ -570,18 +570,26 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 // Fetch last message from DynamoDB
                 try {
                     PaginatedMessageResult lastMsgResult = messageDynamoRepository.getMessagesByRoomId(
-                            room.getId().toString(), null, 1);
+                            room.getId().toString(), null, 20);
                     if (lastMsgResult != null && lastMsgResult.getMessages() != null 
                             && !lastMsgResult.getMessages().isEmpty()) {
-                        MessageDynamo lastMsg = lastMsgResult.getMessages().get(0);
-                        // Normalize attachments in last message
-                        if (lastMsg.getAttachments() != null) {
-                            lastMsg.getAttachments().forEach(a -> {
-                                if (a.getUrl() != null) a.setUrl(minioService.ensurePublicUrl(a.getUrl()));
-                                if (a.getThumbnailUrl() != null) a.setThumbnailUrl(minioService.ensurePublicUrl(a.getThumbnailUrl()));
-                            });
+                        MessageDynamo lastMsg = null;
+                        for (MessageDynamo m : lastMsgResult.getMessages()) {
+                            if (!m.isPrivacyBlocked() || user.getId().toString().equals(m.getSenderId())) {
+                                lastMsg = m;
+                                break;
+                            }
                         }
-                        response.setLastMessage(lastMsg);
+                        if (lastMsg != null) {
+                            // Normalize attachments in last message
+                            if (lastMsg.getAttachments() != null) {
+                                lastMsg.getAttachments().forEach(a -> {
+                                    if (a.getUrl() != null) a.setUrl(minioService.ensurePublicUrl(a.getUrl()));
+                                    if (a.getThumbnailUrl() != null) a.setThumbnailUrl(minioService.ensurePublicUrl(a.getThumbnailUrl()));
+                                });
+                            }
+                            response.setLastMessage(lastMsg);
+                        }
                     }
                 } catch (Exception ex) {
                     log.warn("Could not fetch last message for room {}: {}", room.getId(), ex.getMessage());

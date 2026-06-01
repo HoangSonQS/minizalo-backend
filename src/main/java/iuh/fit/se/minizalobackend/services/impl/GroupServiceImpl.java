@@ -1042,8 +1042,9 @@ public class GroupServiceImpl implements GroupService {
                 .build();
         roomMemberRepository.save(member);
 
-        String sysMsg = user.getUsername() + " đã tham gia nhóm bằng link.";
+        String sysMsg = displayNameOf(user) + " đã tham gia nhóm bằng link.";
         publishGroupEvent(group, ERoomEventType.MEMBER_ADDED, sysMsg, user);
+        publishSystemChatMessage(group, user, sysMsg);
 
         return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group));
     }

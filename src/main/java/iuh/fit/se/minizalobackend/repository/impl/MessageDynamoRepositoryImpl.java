@@ -250,6 +250,7 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
                 if (userId.equals(msg.getSenderId())) continue;
                 if ("system".equals(msg.getSenderId())) continue;
                 if ("SYSTEM".equals(msg.getType()) || "PIN_NOTIFICATION".equals(msg.getType())) continue;
+                if (msg.isPrivacyBlocked()) continue;
 
                 if (msg.getReadBy() == null || !msg.getReadBy().contains(userId)) {
                     count++;
@@ -347,6 +348,7 @@ public class MessageDynamoRepositoryImpl implements MessageDynamoRepository {
                 if ("system".equals(msg.getSenderId())) continue;
                 if ("SYSTEM".equals(msg.getType()) || "PIN_NOTIFICATION".equals(msg.getType())) continue;
                 if (userId.equals(msg.getSenderId())) continue;
+                if (msg.isPrivacyBlocked()) continue;
                 
                 List<String> readBy = msg.getReadBy();
                 if (readBy == null || !readBy.contains(userId)) {

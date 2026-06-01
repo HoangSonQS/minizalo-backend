@@ -36,6 +36,15 @@ public class EsmsSmsServiceImpl implements SmsService {
     @Value("${esms.secret.key:}")
     private String secretKey;
 
+    @Value("${esms.sms.type:4}")
+    private String smsType;
+
+    @Value("${esms.brandname:}")
+    private String brandname;
+
+    @Value("${esms.content.template:MiniZalo - Ma OTP cua ban la: {OTP}. Co hieu luc trong 5 phut. Khong chia se ma nay cho ai.}")
+    private String contentTemplate;
+
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     @Override
@@ -50,7 +59,7 @@ public class EsmsSmsServiceImpl implements SmsService {
         }
 
         String normalizedPhone = normalizeVnPhone(toPhone);
-        String content = "MiniZalo - Ma OTP cua ban la: " + otp + ". Co hieu luc trong 5 phut. Khong chia se ma nay cho ai.";
+        String content = contentTemplate.replace("{OTP}", otp);
 
         // Build JSON payload
         String jsonBody = buildJsonPayload(normalizedPhone, content);
@@ -91,21 +100,22 @@ public class EsmsSmsServiceImpl implements SmsService {
      * SmsType = "4" → kênh OTP, ưu tiên cao nhất, nhanh nhất.
      */
     private String buildJsonPayload(String phone, String content) {
-        return String.format(
-                "{" +
-                "\"ApiKey\":\"%s\"," +
-                "\"Content\":\"%s\"," +
-                "\"Phone\":\"%s\"," +
-                "\"SecretKey\":\"%s\"," +
-                "\"SmsType\":\"8\"," +
-                "\"IsUnicode\":\"0\"," +
-                "\"Sandbox\":\"0\"" +
-                "}",
-                escapeJson(apiKey),
-                escapeJson(content),
-                escapeJson(phone),
-                escapeJson(secretKey)
-        );
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        sb.append(String.format("\"ApiKey\":\"%s\",", escapeJson(apiKey)));
+        sb.append(String.format("\"Content\":\"%s\",", escapeJson(content)));
+        sb.append(String.format("\"Phone\":\"%s\",", escapeJson(phone)));
+        sb.append(String.format("\"SecretKey\":\"%s\",", escapeJson(secretKey)));
+        sb.append(String.format("\"SmsType\":\"%s\",", escapeJson(smsType)));
+        
+        if (brandname != null && !brandname.isBlank()) {
+            sb.append(String.format("\"Brandname\":\"%s\",", escapeJson(brandname)));
+        }
+        
+        sb.append("\"IsUnicode\":\"0\",");
+        sb.append("\"Sandbox\":\"0\"");
+        sb.append("}");
+        return sb.toString();
     }
 
     /**
