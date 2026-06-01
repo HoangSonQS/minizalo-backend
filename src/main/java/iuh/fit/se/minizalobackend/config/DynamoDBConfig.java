@@ -9,6 +9,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClientBuilder;
 
 import java.net.URI;
 
@@ -30,15 +31,24 @@ public class DynamoDBConfig {
 
     @Bean
     public DynamoDbClient dynamoDbClient() {
-        return DynamoDbClient.builder()
-                .endpointOverride(URI.create(dynamodbEndpoint))
-                .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
-                .overrideConfiguration(clientConfig -> clientConfig
-                        .apiCallTimeout(java.time.Duration.ofSeconds(5))
-                        .apiCallAttemptTimeout(java.time.Duration.ofSeconds(5)))
-                .build();
+        DynamoDbClientBuilder builder = DynamoDbClient.builder();
+
+        if (dynamodbEndpoint != null && !dynamodbEndpoint.isBlank()) {
+            builder.endpointOverride(URI.create(dynamodbEndpoint));
+        }
+
+        builder.region(Region.of(region));
+
+        if (accessKey != null && !accessKey.isBlank() && secretKey != null && !secretKey.isBlank()) {
+            builder.credentialsProvider(StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(accessKey, secretKey)));
+        }
+
+        builder.overrideConfiguration(clientConfig -> clientConfig
+                .apiCallTimeout(java.time.Duration.ofSeconds(5))
+                .apiCallAttemptTimeout(java.time.Duration.ofSeconds(5)));
+
+        return builder.build();
     }
 
     @Bean
