@@ -88,9 +88,9 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://minizalo-db:5432/minizalo_db
       - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
-      - AWS_DYNAMODB_ENDPOINT=http://dynamodb-local:8000
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # Use AWS DynamoDB (cloud). Leave AWS_DYNAMODB_ENDPOINT unset so app
+      # uses the DefaultCredentialProviderChain / regional endpoint.
+      # AWS_DYNAMODB_ENDPOINT=
       - AWS_REGION=${AWS_REGION}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
@@ -108,8 +108,6 @@ services:
     depends_on:
       minizalo-db:
         condition: service_healthy
-      dynamodb-local:
-        condition: service_started
       minio:
         condition: service_healthy
     restart: unless-stopped
