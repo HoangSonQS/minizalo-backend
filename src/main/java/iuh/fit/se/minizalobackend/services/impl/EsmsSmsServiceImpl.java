@@ -116,21 +116,6 @@ public class EsmsSmsServiceImpl implements SmsService {
         sb.append("\"Sandbox\":\"0\"");
         sb.append("}");
         return sb.toString();
-        return String.format(
-                "{" +
-                "\"ApiKey\":\"%s\"," +
-                "\"Content\":\"%s\"," +
-                "\"Phone\":\"%s\"," +
-                "\"SecretKey\":\"%s\"," +
-                "\"SmsType\":\"8\"," +
-                "\"IsUnicode\":\"0\"," +
-                "\"Sandbox\":\"0\"" +
-                "}",
-                escapeJson(apiKey),
-                escapeJson(content),
-                escapeJson(phone),
-                escapeJson(secretKey)
-        );
     }
 
     /**
