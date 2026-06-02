@@ -76,7 +76,6 @@ public class ChatIntegrationTest {
 
     private String accessToken;
     private User testUser;
-    private final UUID roomId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() throws Exception {
@@ -109,7 +108,6 @@ public class ChatIntegrationTest {
     void testSearchMessages() throws Exception {
         String query = "hello";
         ChatRoom room = chatRoomRepository.save(ChatRoom.builder()
-                .id(roomId)
                 .type(ERoomType.DIRECT)
                 .createdBy(testUser)
                 .build());
@@ -130,7 +128,7 @@ public class ChatIntegrationTest {
         when(messageDynamoRepository.searchMessages(anyString(), eq(query), anyInt(), any(), any(), any(), any()))
                 .thenReturn(mockResponse);
 
-        mockMvc.perform(get("/api/chat/" + roomId + "/search")
+        mockMvc.perform(get("/api/chat/" + room.getId() + "/search")
                 .param("q", query)
                 .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk());
