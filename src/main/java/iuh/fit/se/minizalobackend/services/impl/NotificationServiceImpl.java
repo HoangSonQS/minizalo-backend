@@ -43,13 +43,13 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Async
     @Transactional
-    public void sendNotification(UUID userId, String token, String title, String body, String roomId, String senderName) {
+    public void sendNotification(UUID userId, String token, String title, String body, String roomId, String senderName, String type) {
         if (token == null || token.isEmpty()) {
             return;
         }
 
         if (isExpoPushToken(token)) {
-            sendViaExpoPush(userId, token, title, body, roomId, senderName);
+            sendViaExpoPush(userId, token, title, body, roomId, senderName, type);
             return;
         }
 
@@ -62,6 +62,9 @@ public class NotificationServiceImpl implements NotificationService {
                 .setToken(token)
                 .setNotification(notification);
 
+        if (type != null && !type.isBlank()) {
+            messageBuilder.putData("type", type);
+        }
         if (roomId != null) {
             messageBuilder.putData("roomId", roomId);
         }
@@ -152,7 +155,7 @@ public class NotificationServiceImpl implements NotificationService {
         return token.startsWith("ExponentPushToken") || token.startsWith("ExpoPushToken");
     }
 
-    private void sendViaExpoPush(UUID userId, String token, String title, String body, String roomId, String senderName) {
+    private void sendViaExpoPush(UUID userId, String token, String title, String body, String roomId, String senderName, String type) {
         try {
             ObjectNode root = objectMapper.createObjectNode();
             root.put("to", token);
@@ -163,6 +166,9 @@ public class NotificationServiceImpl implements NotificationService {
             root.put("channelId", "default");
 
             ObjectNode data = objectMapper.createObjectNode();
+            if (type != null && !type.isBlank()) {
+                data.put("type", type);
+            }
             if (roomId != null) {
                 data.put("roomId", roomId);
             }

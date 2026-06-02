@@ -89,12 +89,27 @@ public class FriendServiceImpl implements FriendService {
 
         Friend friendRequest = new Friend(null, sender, receiver, EFriendStatus.PENDING, null, msg, src, hideTimeline);
         Friend saved = friendRepository.save(friendRequest);
+        String senderLabel = sender.getDisplayName() != null ? sender.getDisplayName() : sender.getUsername();
+
+        try {
+            messagingTemplate.convertAndSendToUser(
+                    receiver.getId().toString(),
+                    "/queue/friend-requests",
+                    java.util.Map.of(
+                            "type", "FRIEND_REQUEST",
+                            "requestId", saved.getId().toString(),
+                            "senderId", sender.getId().toString(),
+                            "senderName", senderLabel != null ? senderLabel : "Người dùng"
+                    )
+            );
+        } catch (Exception ignored) {
+            // WebSocket chỉ để cập nhật realtime, không làm fail API gửi lời mời.
+        }
 
         // Push notification cho người nhận (mobile ngoài app sẽ thấy heads-up giống call).
         try {
             String token = receiver.getFcmToken();
             if (token != null && !token.isBlank()) {
-                String senderLabel = sender.getDisplayName() != null ? sender.getDisplayName() : sender.getUsername();
                 notificationService.sendNotification(
                         receiver.getId(),
                         token,
@@ -103,7 +118,8 @@ public class FriendServiceImpl implements FriendService {
                                 ? (senderLabel + " đã gửi lời mời kết bạn")
                                 : "Bạn có một lời mời kết bạn mới",
                         null,
-                        senderLabel
+                        senderLabel,
+                        "FRIEND_REQUEST"
                 );
             }
         } catch (Exception e) {

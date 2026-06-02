@@ -472,7 +472,8 @@ public class MessageServiceImpl implements MessageService {
                                     "New Message",
                                     "You have a new message from " + message.getSenderName(),
                                     message.getChatRoomId(),
-                                    message.getSenderName());
+                                    message.getSenderName(),
+                                    "MESSAGE");
                         }
                     }
                 }
