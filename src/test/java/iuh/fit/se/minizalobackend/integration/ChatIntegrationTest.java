@@ -108,6 +108,16 @@ public class ChatIntegrationTest {
     @Test
     void testSearchMessages() throws Exception {
         String query = "hello";
+        ChatRoom room = chatRoomRepository.save(ChatRoom.builder()
+                .id(roomId)
+                .type(ERoomType.DIRECT)
+                .createdBy(testUser)
+                .build());
+        roomMemberRepository.save(RoomMember.builder()
+                .room(room)
+                .user(testUser)
+                .role(ERoomRole.MEMBER)
+                .build());
 
         MessageDynamo message = new MessageDynamo();
         message.setMessageId(UUID.randomUUID().toString());

@@ -24,6 +24,7 @@ import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 
 
@@ -49,14 +50,16 @@ public class ChatController {
     private final UserService userService;
     private final ObjectMapper objectMapper;
     private final RoomMemberRepository roomMemberRepository;
+    private final GroupSettingsRepository groupSettingsRepository;
 
-    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate, ChatRoomService chatRoomService, UserService userService, ObjectMapper objectMapper, RoomMemberRepository roomMemberRepository) {
+    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate, ChatRoomService chatRoomService, UserService userService, ObjectMapper objectMapper, RoomMemberRepository roomMemberRepository, GroupSettingsRepository groupSettingsRepository) {
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
         this.chatRoomService = chatRoomService;
         this.userService = userService;
         this.objectMapper = objectMapper;
         this.roomMemberRepository = roomMemberRepository;
+        this.groupSettingsRepository = groupSettingsRepository;
     }
 
     @GetMapping("/api/chat/rooms")
@@ -245,8 +248,13 @@ public class ChatController {
                 filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
             }
             if (membership.getHistoryVisibleFrom() != null) {
-                final java.time.Instant limitInstant = membership.getHistoryVisibleFrom();
+                final java.time.Instant limitInstant = getEffectiveHistoryVisibleFrom(membership);
                 filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            } else {
+                final java.time.Instant limitInstant = getEffectiveHistoryVisibleFrom(membership);
+                if (limitInstant != null) {
+                    filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+                }
             }
             result = new PaginatedMessageResult(filtered, result.getLastEvaluatedKey());
         }
@@ -272,8 +280,13 @@ public class ChatController {
                 filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
             }
             if (membership.getHistoryVisibleFrom() != null) {
-                final java.time.Instant limitInstant = membership.getHistoryVisibleFrom();
+                final java.time.Instant limitInstant = getEffectiveHistoryVisibleFrom(membership);
                 filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            } else {
+                final java.time.Instant limitInstant = getEffectiveHistoryVisibleFrom(membership);
+                if (limitInstant != null) {
+                    filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+                }
             }
             result = new PaginatedMessageResult(filtered, result.getLastEvaluatedKey());
         }
@@ -343,6 +356,31 @@ public class ChatController {
             return !java.time.Instant.parse(message.getCreatedAt()).isAfter(cutoff);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private java.time.Instant getEffectiveHistoryVisibleFrom(RoomMember membership) {
+        if (membership == null) {
+            return null;
+        }
+        if (membership.getHistoryVisibleFrom() != null) {
+            return membership.getHistoryVisibleFrom();
+        }
+        try {
+            UUID roomId = membership.getRoom().getId();
+            boolean isGroup = membership.getRoom().getType() == iuh.fit.se.minizalobackend.models.ERoomType.GROUP;
+            if (!isGroup) {
+                return null;
+            }
+            boolean canReadHistory = groupSettingsRepository.findByGroupId(roomId)
+                    .map(iuh.fit.se.minizalobackend.models.GroupSettings::isAllowNewMemberReadHistory)
+                    .orElse(true);
+            if (canReadHistory || membership.getJoinedAt() == null) {
+                return null;
+            }
+            return membership.getJoinedAt().atZone(java.time.ZoneOffset.UTC).toInstant();
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -435,10 +473,18 @@ public class ChatController {
         }
         if (resp != null && resp.getMessages() != null && membership.getHistoryVisibleFrom() != null) {
             java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(resp.getMessages());
-            final java.time.Instant limitInstant = membership.getHistoryVisibleFrom();
+            final java.time.Instant limitInstant = getEffectiveHistoryVisibleFrom(membership);
             filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
             resp.setMessages(filtered);
             resp.setTotalResults(filtered.size());
+        } else if (resp != null && resp.getMessages() != null) {
+            final java.time.Instant limitInstant = getEffectiveHistoryVisibleFrom(membership);
+            if (limitInstant != null) {
+                java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(resp.getMessages());
+                filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+                resp.setMessages(filtered);
+                resp.setTotalResults(filtered.size());
+            }
         }
         return ResponseEntity.ok(resp);
     }

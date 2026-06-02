@@ -2,8 +2,13 @@ package iuh.fit.se.minizalobackend.controllers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import iuh.fit.se.minizalobackend.dtos.response.PaginatedMessageResult;
+import iuh.fit.se.minizalobackend.models.ChatRoom;
+import iuh.fit.se.minizalobackend.models.ERoomRole;
+import iuh.fit.se.minizalobackend.models.ERoomType;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
+import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.payload.request.RecallMessageRequest;
+import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.services.MessageService;
 import io.minio.MinioClient;
 import org.junit.jupiter.api.Test;
@@ -19,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -46,6 +52,9 @@ public class ChatControllerTest {
     @MockBean
     private SimpMessagingTemplate simpMessagingTemplate;
 
+    @MockBean
+    private RoomMemberRepository roomMemberRepository;
+
     @MockBean(name = "internalMinioClient")
     private MinioClient minioClient;
 
@@ -53,9 +62,10 @@ public class ChatControllerTest {
     private MinioClient publicMinioClient;
 
     @Test
-    @WithMockUser
+    @WithMockUser(username = "00000000-0000-0000-0000-000000000001")
     void getChatHistory_Success() throws Exception {
         UUID roomId = UUID.randomUUID();
+        UUID userId = UUID.fromString("00000000-0000-0000-0000-000000000001");
         String lastKey = "someOpaqueKey";
         int limit = 20;
 
@@ -68,6 +78,15 @@ public class ChatControllerTest {
                 "nextOpaqueKey");
 
         when(messageService.getRoomMessages(eq(roomId), eq(lastKey), eq(limit))).thenReturn(mockResult);
+        ChatRoom room = ChatRoom.builder()
+                .id(roomId)
+                .type(ERoomType.DIRECT)
+                .build();
+        RoomMember member = RoomMember.builder()
+                .room(room)
+                .role(ERoomRole.MEMBER)
+                .build();
+        when(roomMemberRepository.findByRoom_IdAndUser_Id(eq(roomId), eq(userId))).thenReturn(Optional.of(member));
 
         mockMvc.perform(get("/api/chat/history/{roomId}", roomId)
                 .param("lastKey", lastKey)

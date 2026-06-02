@@ -923,9 +923,9 @@ public class MessageServiceImpl implements MessageService {
                         final java.time.Instant limitInstant = membership.getChatDeletedAt();
                         roomMsgs.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
                     }
-                    if (membership.getHistoryVisibleFrom() != null) {
-                        final java.time.Instant limitInstant = membership.getHistoryVisibleFrom();
-                        roomMsgs.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+                    final java.time.Instant historyLimit = getEffectiveHistoryVisibleFrom(membership);
+                    if (historyLimit != null) {
+                        roomMsgs.removeIf(m -> isMessageAtOrBefore(m, historyLimit));
                     }
                     allMatches.addAll(roomMsgs);
                 }
@@ -960,6 +960,30 @@ public class MessageServiceImpl implements MessageService {
             return !java.time.Instant.parse(message.getCreatedAt()).isAfter(cutoff);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private java.time.Instant getEffectiveHistoryVisibleFrom(RoomMember membership) {
+        if (membership == null) {
+            return null;
+        }
+        if (membership.getHistoryVisibleFrom() != null) {
+            return membership.getHistoryVisibleFrom();
+        }
+        try {
+            ChatRoom room = membership.getRoom();
+            if (room == null || room.getType() != ERoomType.GROUP) {
+                return null;
+            }
+            boolean canReadHistory = groupSettingsRepository.findByGroupId(room.getId())
+                    .map(iuh.fit.se.minizalobackend.models.GroupSettings::isAllowNewMemberReadHistory)
+                    .orElse(true);
+            if (canReadHistory || membership.getJoinedAt() == null) {
+                return null;
+            }
+            return membership.getJoinedAt().atZone(java.time.ZoneOffset.UTC).toInstant();
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -1054,7 +1078,7 @@ public class MessageServiceImpl implements MessageService {
                         lastReadAtIso = membership.getLastReadAt().atZone(java.time.ZoneOffset.UTC).toInstant().toString();
                     }
                     chatDeletedAt = membership.getChatDeletedAt();
-                    historyVisibleFrom = membership.getHistoryVisibleFrom();
+                    historyVisibleFrom = getEffectiveHistoryVisibleFrom(membership);
                 }
             }
         } catch (Exception e) {

@@ -577,6 +577,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                     }
                 }
 
+                java.time.Instant historyVisibleFrom = getEffectiveHistoryVisibleFrom(membership);
+
                 // Fetch last message from DynamoDB
                 try {
                     PaginatedMessageResult lastMsgResult = messageDynamoRepository.getMessagesByRoomId(
@@ -585,6 +587,9 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                             && !lastMsgResult.getMessages().isEmpty()) {
                         MessageDynamo lastMsg = null;
                         for (MessageDynamo m : lastMsgResult.getMessages()) {
+                            if (isMessageAtOrBefore(m, historyVisibleFrom)) {
+                                continue;
+                            }
                             if (!m.isPrivacyBlocked() || user.getId().toString().equals(m.getSenderId())) {
                                 lastMsg = m;
                                 break;
@@ -618,6 +623,9 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                     String lastReadAtIso = null;
                     if (membership.getLastReadAt() != null) {
                         lastReadAtIso = membership.getLastReadAt().atZone(java.time.ZoneOffset.UTC).toInstant().toString();
+                    }
+                    if (historyVisibleFrom != null) {
+                        lastReadAtIso = maxInstantIso(lastReadAtIso, historyVisibleFrom);
                     }
                     long unread = messageDynamoRepository.countUnreadMessages(room.getId().toString(), user.getId().toString(), lastReadAtIso);
                     response.setUnreadCount((int) unread);
@@ -663,6 +671,56 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     }
 
 // Duplicate method removed
+
+    private java.time.Instant getEffectiveHistoryVisibleFrom(RoomMember membership) {
+        if (membership == null) {
+            return null;
+        }
+        if (membership.getHistoryVisibleFrom() != null) {
+            return membership.getHistoryVisibleFrom();
+        }
+        try {
+            ChatRoom room = membership.getRoom();
+            if (room == null || room.getType() != ERoomType.GROUP) {
+                return null;
+            }
+            boolean canReadHistory = groupSettingsRepository.findByGroupId(room.getId())
+                    .map(GroupSettings::isAllowNewMemberReadHistory)
+                    .orElse(true);
+            if (canReadHistory || membership.getJoinedAt() == null) {
+                return null;
+            }
+            return membership.getJoinedAt().atZone(java.time.ZoneOffset.UTC).toInstant();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean isMessageAtOrBefore(MessageDynamo message, java.time.Instant cutoff) {
+        if (message == null || cutoff == null || message.getCreatedAt() == null) {
+            return false;
+        }
+        try {
+            return !java.time.Instant.parse(message.getCreatedAt()).isAfter(cutoff);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String maxInstantIso(String currentIso, java.time.Instant candidate) {
+        if (candidate == null) {
+            return currentIso;
+        }
+        if (currentIso == null || currentIso.isBlank()) {
+            return candidate.toString();
+        }
+        try {
+            java.time.Instant current = java.time.Instant.parse(currentIso);
+            return current.isAfter(candidate) ? current.toString() : candidate.toString();
+        } catch (Exception e) {
+            return candidate.toString();
+        }
+    }
 
     private RoomMemberResponse convertToRoomMemberResponse(RoomMember roomMember) {
         return RoomMemberResponse.builder()
