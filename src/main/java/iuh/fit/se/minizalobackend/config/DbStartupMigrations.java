@@ -38,6 +38,14 @@ public class DbStartupMigrations {
                 log.warn("[DB-MIGRATION] Skip ensuring chat room visual metadata: {}", e.getMessage());
             }
 
+            try {
+                jdbc.execute("ALTER TABLE room_members ADD COLUMN IF NOT EXISTS chat_deleted_at timestamp");
+                jdbc.execute("ALTER TABLE room_members ADD COLUMN IF NOT EXISTS history_visible_from timestamp");
+                log.info("[DB-MIGRATION] Ensured room_members chat history cutoffs exist");
+            } catch (Exception e) {
+                log.warn("[DB-MIGRATION] Skip ensuring room_members chat history cutoffs: {}", e.getMessage());
+            }
+
             // 2) Ensure call_sessions.group_call exists and is NOT NULL (fix /api/call/pending 500).
             // Hibernate ddl-auto=update có thể fail khi thêm cột NOT NULL vào bảng đã có dữ liệu.
             try {

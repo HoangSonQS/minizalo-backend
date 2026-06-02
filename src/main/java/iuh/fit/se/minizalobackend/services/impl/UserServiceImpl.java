@@ -252,8 +252,8 @@ public class UserServiceImpl implements UserService {
             return List.of();
         }
 
-        // Ngược lại (chứa chữ cái): tìm theo username và lọc ra chính mình
-        return userRepository.findByUsernameContainingIgnoreCase(q).stream()
+        // Ngược lại (chứa chữ cái): tìm theo displayName hoặc username và lọc ra chính mình
+        return userRepository.searchByDisplayNameOrUsername(q).stream()
                 .filter(u -> !u.getId().equals(currentUserId))
                 .map(this::mapUserToUserProfileResponse)
                 .collect(Collectors.toList());

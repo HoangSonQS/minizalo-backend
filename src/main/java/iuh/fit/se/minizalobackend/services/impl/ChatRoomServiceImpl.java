@@ -11,6 +11,7 @@ import iuh.fit.se.minizalobackend.exception.custom.*;
 import iuh.fit.se.minizalobackend.models.*;
 import iuh.fit.se.minizalobackend.repository.ChatRoomRepository;
 import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
+import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 import iuh.fit.se.minizalobackend.repository.UserRepository;
 import iuh.fit.se.minizalobackend.services.ChatRoomService;
@@ -40,6 +41,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
     private final iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository;
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final GroupSettingsRepository groupSettingsRepository;
 
     public ChatRoomServiceImpl(ChatRoomRepository chatRoomRepository,
             RoomMemberRepository roomMemberRepository,
@@ -49,7 +51,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
             iuh.fit.se.minizalobackend.repository.MessageDynamoRepository messageDynamoRepository,
             iuh.fit.se.minizalobackend.services.MinioService minioService,
             MessageService messageService,
-            SimpMessagingTemplate messagingTemplate) {
+            SimpMessagingTemplate messagingTemplate,
+            GroupSettingsRepository groupSettingsRepository) {
         this.chatRoomRepository = chatRoomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.groupEventRepository = groupEventRepository;
@@ -59,6 +62,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         this.minioService = minioService;
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
+        this.groupSettingsRepository = groupSettingsRepository;
     }
 
     @Override
@@ -216,6 +220,10 @@ public class ChatRoomServiceImpl implements ChatRoomService {
 
         List<RoomMember> addedMembers = new ArrayList<>();
         List<User> newUsersAdded = new ArrayList<>();
+        boolean allowNewMemberReadHistory = groupSettingsRepository.findByGroupId(groupId)
+                .map(GroupSettings::isAllowNewMemberReadHistory)
+                .orElse(true);
+        Instant historyVisibleFrom = allowNewMemberReadHistory ? null : Instant.now();
 
         for (UUID memberId : newMemberIds) {
             if (existingMemberUserIds.contains(memberId)) {
@@ -229,6 +237,7 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                         .room(chatRoom)
                         .user(user)
                         .role(ERoomRole.MEMBER)
+                        .historyVisibleFrom(historyVisibleFrom)
                         .build();
                 addedMembers.add(newMember);
                 newUsersAdded.add(user);
@@ -494,7 +503,8 @@ public class ChatRoomServiceImpl implements ChatRoomService {
         Optional<ChatRoom> existingChat = chatRoomRepository.findDirectChatRoom(user1.getId(), user2.getId(), ERoomType.DIRECT);
         if (existingChat.isPresent()) {
             log.info("Found existing direct chat: {}", existingChat.get().getId());
-            return getGroupChatDetails(existingChat.get().getId());
+            ChatRoom room = existingChat.get();
+            return getGroupChatDetails(room.getId());
         }
 
         log.info("Creating new direct chat");
@@ -613,6 +623,23 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                     response.setUnreadCount((int) unread);
                 } catch (Exception ex) {
                     log.warn("Could not count unread messages for room {}: {}", room.getId(), ex.getMessage());
+                }
+
+                // If the user deleted the chat, and there are no messages after the delete timestamp,
+                // we hide the room from the list (both DIRECT and GROUP).
+                if (membership.getChatDeletedAt() != null) {
+                    MessageDynamo lm = response.getLastMessage();
+                    if (lm == null) {
+                        continue;
+                    }
+                    try {
+                        Instant lastMsgTime = Instant.parse(lm.getCreatedAt());
+                        if (!lastMsgTime.isAfter(membership.getChatDeletedAt())) {
+                            continue;
+                        }
+                    } catch (Exception ex) {
+                        // ignore and show it if parse fails
+                    }
                 }
 
                 responses.add(response);
@@ -749,33 +776,24 @@ public class ChatRoomServiceImpl implements ChatRoomService {
                 .orElseThrow(() -> new iuh.fit.se.minizalobackend.exception.custom.UnauthorizedRoomAccessException(
                         "You are not a member of this room."));
 
-        // Xóa toàn bộ tin nhắn trong phòng khỏi DynamoDB
-        try {
-            messageDynamoRepository.deleteAllByRoomId(roomId.toString());
-            log.info("Deleted all messages for room {} by user {}", roomId, actor.getUsername());
-        } catch (Exception ex) {
-            log.warn("Could not delete messages for room {}: {}", roomId, ex.getMessage());
-        }
+        membership.setChatDeletedAt(Instant.now());
+        roomMemberRepository.save(membership);
+        log.info("Marked room {} (type={}) membership as deleted for user {}", roomId, room.getType(), actor.getUsername());
 
-        if (room.getType() == iuh.fit.se.minizalobackend.models.ERoomType.DIRECT) {
-            // Đối với chat trực tiếp, xóa toàn bộ members và room để reset hoàn toàn
-            List<iuh.fit.se.minizalobackend.models.RoomMember> allMembers = roomMemberRepository.findAllByRoom(room);
+        // If all members have deleted the room, perform complete cleanup
+        List<RoomMember> allMembers = roomMemberRepository.findAllByRoom(room);
+        boolean allDeleted = allMembers.stream().allMatch(m -> m.getChatDeletedAt() != null);
+        if (allDeleted) {
+            try {
+                messageDynamoRepository.deleteAllByRoomId(roomId.toString());
+                log.info("Deleted all messages from DynamoDB for fully deleted room {}", roomId);
+            } catch (Exception ex) {
+                log.warn("Could not delete messages for room {}: {}", roomId, ex.getMessage());
+            }
             roomMemberRepository.deleteAll(allMembers);
             groupEventRepository.deleteAllByGroup(room);
             chatRoomRepository.delete(room);
-            log.info("Deleted DIRECT room {} completely and removed all its members.", roomId);
-        } else {
-            // Xóa membership của actor đối với nhóm
-            roomMemberRepository.delete(membership);
-            log.info("Removed membership of user {} from room {}", actor.getUsername(), roomId);
-
-            // Nếu không còn thành viên nào → xóa luôn room
-            long remainingMembers = roomMemberRepository.countByRoom(room);
-            if (remainingMembers == 0) {
-                groupEventRepository.deleteAllByGroup(room);
-                chatRoomRepository.delete(room);
-                log.info("Room {} has no more members, deleted room.", roomId);
-            }
+            log.info("Deleted room {} completely from Postgres since all members deleted it.", roomId);
         }
     }
 }

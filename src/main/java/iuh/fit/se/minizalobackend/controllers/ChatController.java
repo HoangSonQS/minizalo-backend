@@ -21,8 +21,10 @@ import iuh.fit.se.minizalobackend.services.UserService;
 import iuh.fit.se.minizalobackend.security.services.UserDetailsImpl;
 import iuh.fit.se.minizalobackend.utils.AppConstants;
 import iuh.fit.se.minizalobackend.models.User;
+import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.dtos.response.ChatRoomResponse;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
 
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -46,13 +48,15 @@ public class ChatController {
     private final ChatRoomService chatRoomService;
     private final UserService userService;
     private final ObjectMapper objectMapper;
+    private final RoomMemberRepository roomMemberRepository;
 
-    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate, ChatRoomService chatRoomService, UserService userService, ObjectMapper objectMapper) {
+    public ChatController(MessageService messageService, SimpMessagingTemplate messagingTemplate, ChatRoomService chatRoomService, UserService userService, ObjectMapper objectMapper, RoomMemberRepository roomMemberRepository) {
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
         this.chatRoomService = chatRoomService;
         this.userService = userService;
         this.objectMapper = objectMapper;
+        this.roomMemberRepository = roomMemberRepository;
     }
 
     @GetMapping("/api/chat/rooms")
@@ -141,8 +145,9 @@ public class ChatController {
 
     @MessageMapping("/chat.pin")
     public void handlePinMessage(@Payload @Valid PinMessageRequest request, Principal principal) {
+        String actorId = null;
         try {
-            String actorId = getUserIdFromPrincipal(principal);
+            actorId = getUserIdFromPrincipal(principal);
             User actor = userService.getUserById(UUID.fromString(actorId)).orElse(null);
             String actorName = actor != null
                     ? (actor.getDisplayName() != null ? actor.getDisplayName() : actor.getUsername())
@@ -151,6 +156,7 @@ public class ChatController {
                     request.getRoomId(),
                     request.getMessageId(),
                     request.isPin(),
+                    actorId,
                     actorName,
                     request.getMessageType()
             );
@@ -158,6 +164,7 @@ public class ChatController {
             String dest = "/topic/chat/" + request.getRoomId() + "/pin";
             messagingTemplate.convertAndSend(dest, Map.of(
                     "error", true,
+                    "actorId", actorId != null ? actorId : "",
                     "message", e.getMessage() != null ? e.getMessage() : "Không thể ghim tin nhắn"
             ));
         }
@@ -168,8 +175,16 @@ public class ChatController {
             @PathVariable UUID roomId,
             Principal principal) {
         String currentUserId = getUserIdFromPrincipal(principal);
+        UUID userId = UUID.fromString(currentUserId);
         log.info("User {} clearing history for room: {}", currentUserId, roomId);
-        messageService.deleteAllMessages(roomId.toString());
+
+        RoomMember membership = roomMemberRepository.findByRoom_IdAndUser_Id(roomId, userId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN));
+
+        membership.setChatDeletedAt(java.time.Instant.now());
+        roomMemberRepository.save(membership);
+
+        notifyRoomListChanged(userId, roomId);
         return ResponseEntity.noContent().build();
     }
 
@@ -185,6 +200,30 @@ public class ChatController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Khôi phục cuộc trò chuyện đã bị ẩn (reset chatDeletedAt) — dùng khi mở lại nhóm từ tìm kiếm */
+    @PostMapping("/api/chat/rooms/{roomId}/restore")
+    public ResponseEntity<Void> restoreChatRoom(
+            @PathVariable UUID roomId,
+            Principal principal) {
+        String currentUserId = getUserIdFromPrincipal(principal);
+        UUID userId = UUID.fromString(currentUserId);
+        log.info("User {} restoring chat room: {}", currentUserId, roomId);
+
+        RoomMember membership = roomMemberRepository.findByRoom_IdAndUser_Id(roomId, userId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN, "You are not a member of this room."));
+
+        if (membership.getChatDeletedAt() != null) {
+            membership.setChatDeletedAt(null);
+            roomMemberRepository.save(membership);
+            log.info("Restored room {} for user {}", roomId, currentUserId);
+        }
+
+        notifyRoomListChanged(userId, roomId);
+        return ResponseEntity.noContent().build();
+    }
+
+
     @GetMapping("/api/chat/history/{roomId}")
     public ResponseEntity<PaginatedMessageResult> getChatHistory(
             @PathVariable UUID roomId,
@@ -192,12 +231,23 @@ public class ChatController {
             @RequestParam(defaultValue = "20") int limit,
             Principal principal) {
         String currentUserId = getUserIdFromPrincipal(principal);
+        UUID userId = UUID.fromString(currentUserId);
+        RoomMember membership = roomMemberRepository.findByRoom_IdAndUser_Id(roomId, userId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN));
         log.info("Fetching history for room: {}, limit: {}, user: {}", roomId, limit, currentUserId);
         PaginatedMessageResult result = messageService.getRoomMessages(roomId, lastKey, limit);
         if (result.getMessages() != null) {
             java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(result.getMessages());
             filtered.removeIf(m ->
                     m.isPrivacyBlocked() && !currentUserId.equals(m.getSenderId()));
+            if (membership.getChatDeletedAt() != null) {
+                final java.time.Instant limitInstant = membership.getChatDeletedAt();
+                filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            }
+            if (membership.getHistoryVisibleFrom() != null) {
+                final java.time.Instant limitInstant = membership.getHistoryVisibleFrom();
+                filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            }
             result = new PaginatedMessageResult(filtered, result.getLastEvaluatedKey());
         }
         return ResponseEntity.ok(result);
@@ -207,9 +257,26 @@ public class ChatController {
     public ResponseEntity<PaginatedMessageResult> getPinnedMessages(
             @PathVariable UUID roomId,
             @RequestParam(required = false) String lastKey,
-            @RequestParam(defaultValue = "20") int limit) {
+            @RequestParam(defaultValue = "20") int limit,
+            Principal principal) {
+        String currentUserId = getUserIdFromPrincipal(principal);
+        UUID userId = UUID.fromString(currentUserId);
+        RoomMember membership = roomMemberRepository.findByRoom_IdAndUser_Id(roomId, userId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN));
         log.info("Fetching pinned messages for room: {}, limit: {}", roomId, limit);
         PaginatedMessageResult result = messageService.getPinnedMessages(roomId, lastKey, limit);
+        if (result.getMessages() != null) {
+            java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(result.getMessages());
+            if (membership.getChatDeletedAt() != null) {
+                final java.time.Instant limitInstant = membership.getChatDeletedAt();
+                filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            }
+            if (membership.getHistoryVisibleFrom() != null) {
+                final java.time.Instant limitInstant = membership.getHistoryVisibleFrom();
+                filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            }
+            result = new PaginatedMessageResult(filtered, result.getLastEvaluatedKey());
+        }
         return ResponseEntity.ok(result);
     }
 
@@ -266,6 +333,17 @@ public class ChatController {
             @RequestParam(defaultValue = "20") int size,
             Principal principal) {
         return ResponseEntity.ok(List.of());
+    }
+
+    private boolean isMessageAtOrBefore(MessageDynamo message, java.time.Instant cutoff) {
+        if (message == null || cutoff == null || message.getCreatedAt() == null) {
+            return false;
+        }
+        try {
+            return !java.time.Instant.parse(message.getCreatedAt()).isAfter(cutoff);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private String getUserIdFromPrincipal(Principal principal) {
@@ -338,11 +416,31 @@ public class ChatController {
             @RequestParam(required = false) String lastKey,
             @RequestParam(required = false) String senderId,
             @RequestParam(required = false) String fromDate,
-            @RequestParam(required = false) String toDate) {
+            @RequestParam(required = false) String toDate,
+            Principal principal) {
+        String currentUserId = getUserIdFromPrincipal(principal);
+        UUID userId = UUID.fromString(currentUserId);
+        RoomMember membership = roomMemberRepository.findByRoom_IdAndUser_Id(roomId, userId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN));
         log.info("Searching messages in room: {}, q={}, senderId={}, fromDate={}, toDate={}", roomId, q, senderId,
                 fromDate, toDate);
-        return ResponseEntity.ok(
-                messageService.searchMessages(roomId, q, limit, lastKey, senderId, fromDate, toDate));
+        iuh.fit.se.minizalobackend.dtos.response.SearchMessageResponse resp =
+                messageService.searchMessages(roomId, q, limit, lastKey, senderId, fromDate, toDate);
+        if (resp != null && resp.getMessages() != null && membership.getChatDeletedAt() != null) {
+            java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(resp.getMessages());
+            final java.time.Instant limitInstant = membership.getChatDeletedAt();
+            filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            resp.setMessages(filtered);
+            resp.setTotalResults(filtered.size());
+        }
+        if (resp != null && resp.getMessages() != null && membership.getHistoryVisibleFrom() != null) {
+            java.util.List<MessageDynamo> filtered = new java.util.ArrayList<>(resp.getMessages());
+            final java.time.Instant limitInstant = membership.getHistoryVisibleFrom();
+            filtered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+            resp.setMessages(filtered);
+            resp.setTotalResults(filtered.size());
+        }
+        return ResponseEntity.ok(resp);
     }
 
     /**
@@ -426,6 +524,10 @@ public class ChatController {
             @RequestParam(defaultValue = "15") int countAfter,
             Principal principal) {
         String userId = getUserIdFromPrincipal(principal);
+        UUID userUuid = UUID.fromString(userId);
+        if (!roomMemberRepository.existsByRoom_IdAndUser_Id(roomId, userUuid)) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
+        }
         log.info("Fetching unread context for room: {}, user: {}", roomId, userId);
         iuh.fit.se.minizalobackend.dtos.response.UnreadContextResponse ctx =
                 messageService.getUnreadContext(roomId, userId, countBefore, countAfter);
