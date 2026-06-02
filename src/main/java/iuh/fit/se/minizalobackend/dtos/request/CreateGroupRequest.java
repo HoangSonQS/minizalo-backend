@@ -15,7 +15,7 @@ import java.util.List;
 @AllArgsConstructor
 public class CreateGroupRequest {
     @NotBlank(message = "Group name is required")
-    @Size(min = 3, max = 50, message = "Group name must be between 3 and 50 characters")
+    @Size(min = 1, max = 50, message = "Group name must be between 1 and 50 characters")
     private String groupName;
     private List<String> initialMemberIds;
 }

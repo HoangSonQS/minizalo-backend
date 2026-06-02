@@ -303,12 +303,17 @@ public class GroupServiceImpl implements GroupService {
                 .collect(Collectors.toList());
 
         List<RoomMember> newMembers = new ArrayList<>();
+        boolean allowNewMemberReadHistory = groupSettingsRepository.findByGroupId(groupId)
+                .map(iuh.fit.se.minizalobackend.models.GroupSettings::isAllowNewMemberReadHistory)
+                .orElse(true);
+        Instant historyVisibleFrom = allowNewMemberReadHistory ? null : Instant.now();
         for (User user : usersToAdd) {
             if (!existingMemberUserIds.contains(user.getId())) {
                 RoomMember roomMember = RoomMember.builder()
                         .room(groupChatRoom)
                         .user(user)
                         .role(ERoomRole.MEMBER)
+                        .historyVisibleFrom(historyVisibleFrom)
                         .build();
                 newMembers.add(roomMember);
             }
@@ -863,8 +868,11 @@ public class GroupServiceImpl implements GroupService {
         if (request.getAllowJoinByLink() != null) settings.setAllowJoinByLink(request.getAllowJoinByLink());
 
         settings = groupSettingsRepository.save(settings);
+        iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse settingsResponse =
+                modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
         groupChatRoom.setUpdatedAt(LocalDateTime.now());
         groupRepository.save(groupChatRoom);
+        messagingTemplate.convertAndSend("/topic/chat/" + groupChatRoom.getId() + "/settings", settingsResponse);
 
         // Thông báo SYSTEM trong chat để web/mobile thấy ngay (giống Zalo)
         List<String> changed = new ArrayList<>();
@@ -894,7 +902,7 @@ public class GroupServiceImpl implements GroupService {
             publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
         }
 
-        return modelMapper.map(settings, iuh.fit.se.minizalobackend.dtos.response.GroupSettingsResponse.class);
+        return settingsResponse;
     }
 
     @Override
@@ -964,6 +972,15 @@ public class GroupServiceImpl implements GroupService {
             // Remove them if they are in the group
             roomMemberRepository.findByRoomAndUser(groupChatRoom, targetUser).ifPresent(roomMemberRepository::delete);
             
+            try {
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + groupChatRoom.getId().toString(),
+                        "{\"roomListEvent\":\"REMOVED\",\"roomId\":\"" + groupChatRoom.getId()
+                                + "\",\"forUserId\":\"" + targetUser.getId() + "\"}");
+            } catch (Exception e) {
+                log.warn("Failed to broadcast room REMOVED for blocked user: {}", e.getMessage());
+            }
+
             String sysMsg = displayNameOf(initiator) + " đã chặn " + displayNameOf(targetUser) + " khỏi nhóm.";
             publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_REMOVED, sysMsg, targetUser);
             publishSystemChatMessage(groupChatRoom, initiator, sysMsg);
@@ -1039,6 +1056,7 @@ public class GroupServiceImpl implements GroupService {
                 .room(group)
                 .user(user)
                 .role(ERoomRole.MEMBER)
+                .historyVisibleFrom(settings.isAllowNewMemberReadHistory() ? null : Instant.now())
                 .build();
         roomMemberRepository.save(member);
 

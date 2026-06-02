@@ -46,4 +46,10 @@ public class RoomMember {
 
     @Column(name = "nickname", length = 100)
     private String nickname; // Per-user custom name for this room's partner/group
+
+    @Column(name = "chat_deleted_at")
+    private java.time.Instant chatDeletedAt;
+
+    @Column(name = "history_visible_from")
+    private java.time.Instant historyVisibleFrom;
 }

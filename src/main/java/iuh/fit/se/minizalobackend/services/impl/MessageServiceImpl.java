@@ -280,15 +280,22 @@ public class MessageServiceImpl implements MessageService {
 
         UUID targetUuid = UUID.fromString(targetRoomId);
         Optional<ChatRoom> targetRoomOpt = chatRoomRepository.findById(targetUuid);
-        if (targetRoomOpt.isPresent() && targetRoomOpt.get().getType() == ERoomType.DIRECT) {
-            List<RoomMember> tMembers = roomMemberRepository.findAllByRoomWithUsersFetched(targetRoomOpt.get());
-            Optional<User> otherOpt = tMembers.stream()
-                    .map(RoomMember::getUser)
-                    .filter(u -> !u.getId().toString().equals(senderId))
-                    .findFirst();
-            if (otherOpt.isPresent()) {
-                User recipient = userRepository.findById(otherOpt.get().getId()).orElse(otherOpt.get());
-                assertRecipientAcceptsDirectMessageFrom(sender, recipient);
+        if (targetRoomOpt.isPresent()) {
+            if (targetRoomOpt.get().getType() == ERoomType.DIRECT) {
+                List<RoomMember> tMembers = roomMemberRepository.findAllByRoomWithUsersFetched(targetRoomOpt.get());
+                Optional<User> otherOpt = tMembers.stream()
+                        .map(RoomMember::getUser)
+                        .filter(u -> !u.getId().toString().equals(senderId))
+                        .findFirst();
+                if (otherOpt.isPresent()) {
+                    User recipient = userRepository.findById(otherOpt.get().getId()).orElse(otherOpt.get());
+                    assertRecipientAcceptsDirectMessageFrom(sender, recipient);
+                }
+            } else if (targetRoomOpt.get().getType() == ERoomType.GROUP) {
+                boolean isMember = roomMemberRepository.existsByRoom_IdAndUser_Id(targetUuid, sender.getId());
+                if (!isMember) {
+                    throw new IllegalStateException("YOU_ARE_NOT_A_MEMBER_OF_THIS_GROUP");
+                }
             }
         }
 
@@ -343,6 +350,20 @@ public class MessageServiceImpl implements MessageService {
             }
         }
 
+        UUID receiverUuid;
+        try {
+            receiverUuid = UUID.fromString(request.getReceiverId());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid receiver id");
+        }
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findById(receiverUuid);
+        if (roomOpt.isPresent() && roomOpt.get().getType() == ERoomType.GROUP) {
+            boolean isMember = roomMemberRepository.existsByRoom_IdAndUser_Id(receiverUuid, sender.getId());
+            if (!isMember) {
+                throw new IllegalStateException("YOU_ARE_NOT_A_MEMBER_OF_THIS_GROUP");
+            }
+        }
+
         if (request.getReplyToMessageId() != null && !request.getReplyToMessageId().isBlank()) {
             boolean exists = messageDynamoRepository
                     .getMessage(request.getReceiverId(), request.getReplyToMessageId())
@@ -370,6 +391,41 @@ public class MessageServiceImpl implements MessageService {
 
         log.info("[DEBUG] ProcessMessage attachments count: {}",
                 message.getAttachments() != null ? message.getAttachments().size() : "null");
+
+        if (roomOpt.isPresent()) {
+            List<RoomMember> members = roomMemberRepository.findAllByRoom(roomOpt.get());
+            for (RoomMember m : members) {
+                if (m.getChatDeletedAt() != null) {
+                    boolean wasHidden = false;
+                    try {
+                        PaginatedMessageResult lastMsgResult = messageDynamoRepository.getMessagesByRoomId(
+                                roomOpt.get().getId().toString(), null, 1);
+                        if (lastMsgResult != null && lastMsgResult.getMessages() != null && !lastMsgResult.getMessages().isEmpty()) {
+                            MessageDynamo lastMsg = lastMsgResult.getMessages().get(0);
+                            if (!Instant.parse(lastMsg.getCreatedAt()).isAfter(m.getChatDeletedAt())) {
+                                wasHidden = true;
+                            }
+                        } else {
+                            wasHidden = true;
+                        }
+                    } catch (Exception ex) {
+                        wasHidden = true;
+                    }
+
+                    if (wasHidden) {
+                        try {
+                            messagingTemplate.convertAndSendToUser(
+                                    m.getUser().getId().toString(),
+                                    "/queue/rooms",
+                                    Map.of("action", "ADDED", "roomId", roomOpt.get().getId().toString())
+                            );
+                        } catch (Exception ex) {
+                            log.warn("Could not notify room ADDED: {}", ex.getMessage());
+                        }
+                    }
+                }
+            }
+        }
 
         saveMessage(message);
         if (strangerPrivacyBlocked) {
@@ -646,6 +702,11 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void pinMessage(String chatRoomId, String messageId, boolean pin, String actorName, String messageType) {
+        pinMessage(chatRoomId, messageId, pin, null, actorName, messageType);
+    }
+
+    @Override
+    public void pinMessage(String chatRoomId, String messageId, boolean pin, String actorId, String actorName, String messageType) {
         messageDynamoRepository.getMessage(chatRoomId, messageId).ifPresent(message -> {
             if (pin && !message.isPinned()) {
                 long pinnedCount = messageDynamoRepository.countPinnedMessages(chatRoomId);
@@ -653,6 +714,30 @@ public class MessageServiceImpl implements MessageService {
                     throw new IllegalStateException("Chỉ được pin tối đa 5 tin nhắn trong một cuộc trò chuyện.");
                 }
             }
+
+            chatRoomRepository.findById(UUID.fromString(chatRoomId)).ifPresent(room -> {
+                if (room.getType() != ERoomType.GROUP) {
+                    return;
+                }
+
+                groupSettingsRepository.findByGroupId(room.getId()).ifPresent(settings -> {
+                    if (settings.isAllowMemberPin()) {
+                        return;
+                    }
+                    if (actorId == null || actorId.isBlank()) {
+                        throw new IllegalStateException("Only admins can pin messages in this group.");
+                    }
+
+                    UUID actorUuid = UUID.fromString(actorId);
+                    RoomMember member = roomMemberRepository.findByRoom_IdAndUser_Id(room.getId(), actorUuid)
+                            .orElseThrow(() -> new IllegalStateException("Only group members can pin messages."));
+                    boolean isOwner = room.getCreatedBy().getId().equals(actorUuid);
+                    boolean isAdmin = member.getRole() == iuh.fit.se.minizalobackend.models.ERoomRole.ADMIN;
+                    if (!isOwner && !isAdmin) {
+                        throw new IllegalStateException("Only admins can pin messages in this group.");
+                    }
+                });
+            });
 
             // Permission check for groups
             chatRoomRepository.findById(java.util.UUID.fromString(chatRoomId)).ifPresent(room -> {
@@ -832,7 +917,18 @@ public class MessageServiceImpl implements MessageService {
                 String roomId = membership.getRoom().getId().toString();
                 SearchMessageResponse roomResult = messageDynamoRepository
                         .searchMessages(roomId, query, perRoomLimit, null, null, null, null);
-                allMatches.addAll(roomResult.getMessages());
+                if (roomResult.getMessages() != null) {
+                    java.util.List<MessageDynamo> roomMsgs = new java.util.ArrayList<>(roomResult.getMessages());
+                    if (membership.getChatDeletedAt() != null) {
+                        final java.time.Instant limitInstant = membership.getChatDeletedAt();
+                        roomMsgs.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+                    }
+                    final java.time.Instant historyLimit = getEffectiveHistoryVisibleFrom(membership);
+                    if (historyLimit != null) {
+                        roomMsgs.removeIf(m -> isMessageAtOrBefore(m, historyLimit));
+                    }
+                    allMatches.addAll(roomMsgs);
+                }
             } catch (Exception e) {
                 log.warn("[searchMessagesGlobal] Error searching room: {}", e.getMessage());
             }
@@ -854,6 +950,41 @@ public class MessageServiceImpl implements MessageService {
         boolean hasMore = allMatches.size() > limit;
         log.info("[searchMessagesGlobal] userId={}, query='{}', found={}", userId, query, paged.size());
         return new SearchMessageResponse(paged, null, hasMore, paged.size());
+    }
+
+    private boolean isMessageAtOrBefore(MessageDynamo message, java.time.Instant cutoff) {
+        if (message == null || cutoff == null || message.getCreatedAt() == null) {
+            return false;
+        }
+        try {
+            return !java.time.Instant.parse(message.getCreatedAt()).isAfter(cutoff);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private java.time.Instant getEffectiveHistoryVisibleFrom(RoomMember membership) {
+        if (membership == null) {
+            return null;
+        }
+        if (membership.getHistoryVisibleFrom() != null) {
+            return membership.getHistoryVisibleFrom();
+        }
+        try {
+            ChatRoom room = membership.getRoom();
+            if (room == null || room.getType() != ERoomType.GROUP) {
+                return null;
+            }
+            boolean canReadHistory = groupSettingsRepository.findByGroupId(room.getId())
+                    .map(iuh.fit.se.minizalobackend.models.GroupSettings::isAllowNewMemberReadHistory)
+                    .orElse(true);
+            if (canReadHistory || membership.getJoinedAt() == null) {
+                return null;
+            }
+            return membership.getJoinedAt().atZone(java.time.ZoneOffset.UTC).toInstant();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -934,6 +1065,8 @@ public class MessageServiceImpl implements MessageService {
 
         // B1: Tìm lastReadAt của user để tối ưu việc tìm tin chưa đọc
         String lastReadAtIso = null;
+        java.time.Instant chatDeletedAt = null;
+        java.time.Instant historyVisibleFrom = null;
         try {
             Optional<ChatRoom> roomOpt = chatRoomRepository.findById(roomId);
             Optional<User> userOpt = userRepository.findById(java.util.UUID.fromString(userId));
@@ -944,6 +1077,8 @@ public class MessageServiceImpl implements MessageService {
                     if (membership.getLastReadAt() != null) {
                         lastReadAtIso = membership.getLastReadAt().atZone(java.time.ZoneOffset.UTC).toInstant().toString();
                     }
+                    chatDeletedAt = membership.getChatDeletedAt();
+                    historyVisibleFrom = getEffectiveHistoryVisibleFrom(membership);
                 }
             }
         } catch (Exception e) {
@@ -961,6 +1096,20 @@ public class MessageServiceImpl implements MessageService {
         }
 
         MessageDynamo target = targetOpt.get();
+        if (chatDeletedAt != null) {
+            try {
+                if (!java.time.Instant.parse(target.getCreatedAt()).isAfter(chatDeletedAt)) {
+                    log.info("[getUnreadContext] Oldest unread message is before or at chatDeletedAt. Returning empty.");
+                    return null;
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+        if (historyVisibleFrom != null && isMessageAtOrBefore(target, historyVisibleFrom)) {
+            log.info("[getUnreadContext] Oldest unread message is before or at historyVisibleFrom. Returning empty.");
+            return null;
+        }
         String targetCreatedAt = target.getCreatedAt();
 
         // B2: Lấy context xung quanh target
@@ -972,10 +1121,20 @@ public class MessageServiceImpl implements MessageService {
         ctx.messagesAfter().forEach(this::normalizeMessage);
         ctx.messagesBefore().forEach(this::normalizeMessage);
 
+        java.util.List<MessageDynamo> beforeFiltered = new java.util.ArrayList<>(ctx.messagesBefore());
+        if (chatDeletedAt != null) {
+            final java.time.Instant limitInstant = chatDeletedAt;
+            beforeFiltered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+        }
+        if (historyVisibleFrom != null) {
+            final java.time.Instant limitInstant = historyVisibleFrom;
+            beforeFiltered.removeIf(m -> isMessageAtOrBefore(m, limitInstant));
+        }
+
         return new iuh.fit.se.minizalobackend.dtos.response.UnreadContextResponse(
                 target,
                 ctx.messagesAfter(),
-                ctx.messagesBefore(),
+                beforeFiltered,
                 ctx.hasMoreBefore(),
                 ctx.hasMoreAfter()
         );

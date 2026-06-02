@@ -32,6 +32,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // Tìm kiếm danh sách user theo username (case-insensitive)
     List<User> findByUsernameContainingIgnoreCase(String username);
 
+    @Query("SELECT u FROM User u WHERE LOWER(u.displayName) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(u.username) LIKE LOWER(CONCAT('%', :q, '%'))")
+    List<User> searchByDisplayNameOrUsername(@Param("q") String q);
+
     // Tìm kiếm user theo phone (chính xác) và danh sách theo phone (nếu cần)
     Optional<User> findByPhone(String phone);
 
