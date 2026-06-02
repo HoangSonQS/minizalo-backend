@@ -49,7 +49,7 @@ class NotificationServiceTest {
             mockedStatic.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
             when(firebaseMessaging.send(any())).thenReturn("message-id");
 
-            notificationService.sendNotification(userId, fcmToken, "Title", "Body", "room-1", "TestUser");
+            notificationService.sendNotification(userId, fcmToken, "Title", "Body", "room-1", "TestUser", "MESSAGE");
 
             verify(firebaseMessaging, times(1)).send(any());
             verify(userRepository, never()).save(any());
@@ -67,7 +67,7 @@ class NotificationServiceTest {
             mockedStatic.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
             when(firebaseMessaging.send(any())).thenThrow(exception);
 
-            notificationService.sendNotification(userId, fcmToken, "Title", "Body", "room-1", "TestUser");
+            notificationService.sendNotification(userId, fcmToken, "Title", "Body", "room-1", "TestUser", "MESSAGE");
 
             verify(userRepository, times(1)).save(testUser);
             assert testUser.getFcmToken() == null;
