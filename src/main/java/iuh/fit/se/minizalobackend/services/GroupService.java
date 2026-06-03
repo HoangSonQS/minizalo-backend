@@ -50,4 +50,6 @@ public interface GroupService {
     // Join by link
     GroupResponse joinByLink(String joinToken, User user);
     String refreshJoinLink(UUID groupId, User initiator);
+    GroupResponse approveJoinRequest(UUID groupId, UUID candidateUserId, User approver);
+    GroupResponse rejectJoinRequest(UUID groupId, UUID candidateUserId, User approver);
 }

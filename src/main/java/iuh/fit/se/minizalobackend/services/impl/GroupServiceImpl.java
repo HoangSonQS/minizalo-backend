@@ -5,6 +5,7 @@ import iuh.fit.se.minizalobackend.dtos.request.SendGroupMessageRequest;
 import iuh.fit.se.minizalobackend.dtos.request.UpdateGroupRequest;
 import iuh.fit.se.minizalobackend.dtos.response.GroupMemberResponse;
 import iuh.fit.se.minizalobackend.dtos.response.GroupResponse;
+import iuh.fit.se.minizalobackend.dtos.response.PendingJoinRequestResponse;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.GroupChatMessage;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.GroupEventMessage;
 import iuh.fit.se.minizalobackend.dtos.response.websocket.ReadReceiptResponse;
@@ -14,12 +15,14 @@ import iuh.fit.se.minizalobackend.models.ERoomEventType;
 import iuh.fit.se.minizalobackend.models.ERoomRole;
 import iuh.fit.se.minizalobackend.models.ERoomType;
 import iuh.fit.se.minizalobackend.models.GroupEvent;
+import iuh.fit.se.minizalobackend.models.GroupPendingInvitation;
 import iuh.fit.se.minizalobackend.models.MessageDynamo;
 import iuh.fit.se.minizalobackend.models.RoomMember;
 import iuh.fit.se.minizalobackend.models.User;
 import iuh.fit.se.minizalobackend.payload.response.MessageResponse;
 import iuh.fit.se.minizalobackend.repository.BlockedGroupMemberRepository;
 import iuh.fit.se.minizalobackend.repository.GroupEventRepository;
+import iuh.fit.se.minizalobackend.repository.GroupPendingInvitationRepository;
 import iuh.fit.se.minizalobackend.repository.GroupRepository;
 import iuh.fit.se.minizalobackend.repository.GroupSettingsRepository;
 import iuh.fit.se.minizalobackend.repository.RoomMemberRepository;
@@ -53,6 +56,7 @@ public class GroupServiceImpl implements GroupService {
     private final GroupEventRepository groupEventRepository;
     private final GroupSettingsRepository groupSettingsRepository;
     private final BlockedGroupMemberRepository blockedGroupMemberRepository;
+    private final GroupPendingInvitationRepository groupPendingInvitationRepository;
     private final GroupRoomCleanupService groupRoomCleanupService;
     private final MessageService messageService;
     private final ModelMapper modelMapper;
@@ -457,7 +461,7 @@ public class GroupServiceImpl implements GroupService {
         }
 
         List<RoomMember> members = roomMemberRepository.findAllByRoom(groupChatRoom);
-        return buildGroupResponse(groupChatRoom, members);
+        return buildGroupResponse(groupChatRoom, members, viewer);
     }
 
     @Override
@@ -737,6 +741,10 @@ public class GroupServiceImpl implements GroupService {
     }
 
     private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers) {
+        return buildGroupResponse(chatRoom, roomMembers, null);
+    }
+
+    private GroupResponse buildGroupResponse(ChatRoom chatRoom, List<RoomMember> roomMembers, User viewerForPending) {
         GroupResponse response = modelMapper.map(chatRoom, GroupResponse.class);
         response.setId(chatRoom.getId().toString());
         response.setGroupName(chatRoom.getName());
@@ -763,7 +771,54 @@ public class GroupServiceImpl implements GroupService {
             response.setSettings(settingsResponse);
         });
 
+        if (viewerForPending != null && canApprovePendingMembership(chatRoom, viewerForPending)) {
+            List<PendingJoinRequestResponse> pendingRequests = groupPendingInvitationRepository
+                    .findByGroup_IdOrderByCreatedAtAsc(chatRoom.getId())
+                    .stream()
+                    .map(this::mapPendingInvitation)
+                    .collect(Collectors.toList());
+            response.setPendingJoinRequests(pendingRequests);
+            response.setPendingJoinRequestCount(pendingRequests.size());
+        } else {
+            response.setPendingJoinRequests(List.of());
+            response.setPendingJoinRequestCount(0);
+        }
+
         return response;
+    }
+
+    private boolean canApprovePendingMembership(ChatRoom room, User viewer) {
+        if (room == null || viewer == null) {
+            return false;
+        }
+        if (room.getCreatedBy() != null && room.getCreatedBy().getId().equals(viewer.getId())) {
+            return true;
+        }
+        return roomMemberRepository.findByRoomAndUserAndRole(room, viewer, ERoomRole.ADMIN).isPresent();
+    }
+
+    private PendingJoinRequestResponse mapPendingInvitation(GroupPendingInvitation invitation) {
+        User candidate = invitation.getCandidateUser();
+        User inviter = invitation.getInvitedBy();
+        return PendingJoinRequestResponse.builder()
+                .userId(candidate.getId().toString())
+                .username(candidate.getUsername())
+                .displayName(displayNameOf(candidate))
+                .avatarUrl(minioService.ensurePublicUrl(candidate.getAvatarUrl()))
+                .invitedByUserId(inviter != null ? inviter.getId().toString() : null)
+                .invitedByDisplayName(inviter != null ? displayNameOf(inviter) : null)
+                .createdAt(invitation.getCreatedAt())
+                .build();
+    }
+
+    private void broadcastPendingJoinsChanged(UUID groupId) {
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + groupId,
+                    "{\"roomListEvent\":\"PENDING_JOINS_CHANGED\",\"roomId\":\"" + groupId + "\"}");
+        } catch (Exception e) {
+            log.warn("Failed to broadcast PENDING_JOINS_CHANGED: {}", e.getMessage());
+        }
     }
 
     private void publishGroupEvent(ChatRoom groupChatRoom, ERoomEventType eventType, String message,
@@ -1048,10 +1103,25 @@ public class GroupServiceImpl implements GroupService {
         }
 
         if (roomMemberRepository.existsByRoomAndUser(group, user)) {
-            return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group));
+            return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group), user);
         }
 
-        // Add user
+        if (settings.isRequireApproval()) {
+            if (!groupPendingInvitationRepository.existsByGroup_IdAndCandidateUser_Id(group.getId(), user.getId())) {
+                GroupPendingInvitation invitation = GroupPendingInvitation.builder()
+                        .group(group)
+                        .candidateUser(user)
+                        .invitedBy(null)
+                        .build();
+                groupPendingInvitationRepository.save(invitation);
+
+                String sysMsg = displayNameOf(user) + " đã xin tham gia nhóm qua link và cần phê duyệt.";
+                publishSystemChatMessage(group, user, sysMsg);
+                broadcastPendingJoinsChanged(group.getId());
+            }
+            return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group), user);
+        }
+
         RoomMember member = RoomMember.builder()
                 .room(group)
                 .user(user)
@@ -1064,7 +1134,83 @@ public class GroupServiceImpl implements GroupService {
         publishGroupEvent(group, ERoomEventType.MEMBER_ADDED, sysMsg, user);
         publishSystemChatMessage(group, user, sysMsg);
 
-        return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group));
+        return buildGroupResponse(group, roomMemberRepository.findAllByRoom(group), user);
+    }
+
+    @Override
+    @Transactional
+    public GroupResponse approveJoinRequest(UUID groupId, UUID candidateUserId, User approver) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        if (!canApprovePendingMembership(groupChatRoom, approver)) {
+            throw new IllegalArgumentException("Chỉ trưởng nhóm hoặc phó nhóm mới có thể phê duyệt thành viên.");
+        }
+
+        GroupPendingInvitation invitation = groupPendingInvitationRepository
+                .findByGroup_IdAndCandidateUser_Id(groupId, candidateUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu chờ duyệt."));
+
+        User candidate = invitation.getCandidateUser();
+        groupPendingInvitationRepository.delete(invitation);
+
+        if (!roomMemberRepository.existsByRoomAndUser(groupChatRoom, candidate)) {
+            iuh.fit.se.minizalobackend.models.GroupSettings settings = groupSettingsRepository.findByGroupId(groupId)
+                    .orElse(null);
+            RoomMember newMember = RoomMember.builder()
+                    .room(groupChatRoom)
+                    .user(candidate)
+                    .role(ERoomRole.MEMBER)
+                    .historyVisibleFrom(settings != null && !settings.isAllowNewMemberReadHistory() ? Instant.now() : null)
+                    .build();
+            roomMemberRepository.save(newMember);
+
+            groupChatRoom.setUpdatedAt(LocalDateTime.now());
+            groupRepository.save(groupChatRoom);
+
+            String sysMsg = displayNameOf(approver) + " đã phê duyệt " + displayNameOf(candidate) + " tham gia nhóm.";
+            publishGroupEvent(groupChatRoom, ERoomEventType.MEMBER_ADDED, sysMsg, candidate);
+            publishSystemChatMessage(groupChatRoom, approver, sysMsg);
+
+            try {
+                messagingTemplate.convertAndSendToUser(
+                        candidate.getUsername(),
+                        "/queue/rooms",
+                        "{\"action\":\"ADDED\",\"roomId\":\"" + groupChatRoom.getId() + "\"}");
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + groupChatRoom.getId(),
+                        "{\"roomListEvent\":\"ADDED\",\"roomId\":\"" + groupChatRoom.getId() + "\"}");
+            } catch (Exception e) {
+                log.warn("Failed to broadcast approved group join: {}", e.getMessage());
+            }
+        }
+
+        broadcastPendingJoinsChanged(groupId);
+        return buildGroupResponse(groupChatRoom, roomMemberRepository.findAllByRoom(groupChatRoom), approver);
+    }
+
+    @Override
+    @Transactional
+    public GroupResponse rejectJoinRequest(UUID groupId, UUID candidateUserId, User approver) {
+        ChatRoom groupChatRoom = groupRepository.findByIdAndType(groupId, ERoomType.GROUP)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        if (!canApprovePendingMembership(groupChatRoom, approver)) {
+            throw new IllegalArgumentException("Chỉ trưởng nhóm hoặc phó nhóm mới có thể từ chối yêu cầu.");
+        }
+
+        GroupPendingInvitation invitation = groupPendingInvitationRepository
+                .findByGroup_IdAndCandidateUser_Id(groupId, candidateUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu chờ duyệt."));
+
+        User candidate = invitation.getCandidateUser();
+        groupPendingInvitationRepository.delete(invitation);
+
+        String sysMsg = displayNameOf(approver) + " đã từ chối yêu cầu tham gia của " + displayNameOf(candidate) + ".";
+        publishSystemChatMessage(groupChatRoom, approver, sysMsg);
+        broadcastPendingJoinsChanged(groupId);
+
+        return buildGroupResponse(groupChatRoom, roomMemberRepository.findAllByRoom(groupChatRoom), approver);
     }
 
     @Override

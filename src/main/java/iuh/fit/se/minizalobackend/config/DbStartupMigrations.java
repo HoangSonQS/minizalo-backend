@@ -46,6 +46,29 @@ public class DbStartupMigrations {
                 log.warn("[DB-MIGRATION] Skip ensuring room_members chat history cutoffs: {}", e.getMessage());
             }
 
+            try {
+                jdbc.execute("""
+                        CREATE TABLE IF NOT EXISTS group_pending_invitations (
+                            id uuid PRIMARY KEY,
+                            group_id uuid NOT NULL,
+                            candidate_user_id uuid NOT NULL,
+                            invited_by_id uuid,
+                            created_at timestamp NOT NULL,
+                            CONSTRAINT fk_group_pending_inv_group FOREIGN KEY (group_id) REFERENCES chat_rooms(id) ON DELETE CASCADE,
+                            CONSTRAINT fk_group_pending_inv_candidate FOREIGN KEY (candidate_user_id) REFERENCES users(id),
+                            CONSTRAINT fk_group_pending_inv_inviter FOREIGN KEY (invited_by_id) REFERENCES users(id),
+                            CONSTRAINT uk_group_pending_inv UNIQUE (group_id, candidate_user_id)
+                        )
+                        """);
+                jdbc.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_group_pending_inv_group_created_at
+                        ON group_pending_invitations(group_id, created_at ASC)
+                        """);
+                log.info("[DB-MIGRATION] Ensured group_pending_invitations table exists");
+            } catch (Exception e) {
+                log.warn("[DB-MIGRATION] Skip ensuring group pending invitations table: {}", e.getMessage());
+            }
+
             // 2) Ensure call_sessions.group_call exists and is NOT NULL (fix /api/call/pending 500).
             // Hibernate ddl-auto=update có thể fail khi thêm cột NOT NULL vào bảng đã có dữ liệu.
             try {
